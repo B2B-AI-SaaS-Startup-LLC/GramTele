@@ -1,0 +1,1 @@
+//! Порт: Telegram/SourceFiles/{window,intro,dialogs,history,chat_helpers,media,poll,inline_bots,menu,boxes,info,settings,overview,profile,passport,payments,statistics,webauthn,support} и mainwidget/mainwindow/tray/main.cpp оригинала AyuGramDesktop.
