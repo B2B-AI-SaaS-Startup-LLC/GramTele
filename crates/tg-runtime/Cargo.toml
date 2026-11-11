@@ -1,0 +1,11 @@
+[package]
+name = "tg-runtime"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Port of Telegram Desktop lib_crl: main-thread queue, background pool, serial queues, objects on queues"
+
+[dependencies]
+# Only the runtime with its blocking pool is needed: crl tasks are plain
+# synchronous closures, so no I/O or timer drivers are enabled.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread"] }
