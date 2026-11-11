@@ -1,0 +1,9 @@
+[package]
+name = "tg-rpl"
+version = "0.0.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Port of Telegram Desktop lib_rpl (reactive producers, event streams, variables, lifetimes)"
+publish = false
+
+[dependencies]
