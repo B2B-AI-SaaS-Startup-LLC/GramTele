@@ -287,7 +287,9 @@ OAEP, все варианты ASN.1/Qt IDNA и JSON numerics на экстрем
 Send-ручка SessionHandle, команды и снимки SessionData. Для отдельного рабочего
 потока LocalSet и Session создаются внутри него; готовый Session нельзя передавать
 через tokio::spawn. Обработка I/O идёт в независимом исполнителе SessionTransport.
-И Query-состояние, и подготовленные запросы доступны через защищённые данные.
+Синхронные get_state/request_state/transport доступны через SessionHandle и
+защищённый снимок SessionData, даже когда Session принадлежит рабочей задаче.
+После stop request_state возвращает RequestSent (0), как оригинал.
 Все Callback/Update/state/key события проходят общую FIFO, затем tg-runtime
 on_main. Фактические done/fail вызовы выполнит будущий Instance на главном потоке.
 В этой задаче сессия доставляет Response, не разбирает тип ответа API.
@@ -329,7 +331,10 @@ Default — образец для тестового сервера (17349), н�
 
 `SessionTransport::submit(action)` не ждёт I/O и обслуживает Connect/Send/Close/
 TimedOut. `next_event()` возвращает Connected/Packet/ReceivedSome/Error/
-Disconnected/SyncTimeRequest. Оно должно быть безопасно при отмене future.
+Disconnected/SyncTimeRequest. Каждое событие содержит ID соединения; ID не
+повторяются после stop/start. Запоздавшие события закрытых соединений
+игнорируются, воспроизводя отключение сигналов QObject. next_event должно быть
+безопасно при отмене future.
 Для TCP используются уже разделённые TcpReader/TcpWriter; один writer последовательно
 дописывает кадры до конца, reader принимает данные независимо от очереди отправки.
 HTTP executor использует отдельные outstanding POST и сообщает need_http_wait.

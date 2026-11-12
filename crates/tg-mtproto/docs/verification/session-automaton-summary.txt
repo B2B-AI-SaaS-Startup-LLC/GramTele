@@ -9,3 +9,4 @@ Native receive cases: 19; original handleReceived envelope prefix executed, not 
 Live tests: not run in this task; help.getConfig/account/production requests not made.
 New dependencies: none in this task.
 Empty authenticated message: original Expects precondition preserved; Rust panic tested after decrypting an authenticated envelope.
+SessionHandle publishes synchronous state/request/transport snapshots; stale connection events after stop/start are ignored (covered by lifecycle scenario).

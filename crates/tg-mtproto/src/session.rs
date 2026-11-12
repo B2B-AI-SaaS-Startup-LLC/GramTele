@@ -12,7 +12,7 @@ use crate::{
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
 };
@@ -107,7 +107,15 @@ pub struct RequestQueues {
     pub have_sent: BTreeMap<u64, RequestHandle>,
     pub received: VecDeque<Response>,
 }
+#[derive(Default)]
+pub(crate) struct SessionSnapshot {
+    pub state: i32,
+    pub retry_at: Option<i64>,
+    pub transport: String,
+    pub private_alive: bool,
+}
 pub struct SessionData {
+    pub(crate) snapshot: Mutex<SessionSnapshot>,
     pub store: Arc<Mutex<RequestStore>>,
     pub queues: Mutex<RequestQueues>,
     options: Mutex<SessionOptions>,
@@ -115,6 +123,7 @@ pub struct SessionData {
     pub environment: Arc<dyn SessionEnvironment>,
     pub shifted_dc_id: i32,
     owner_alive: AtomicBool,
+    next_connection: AtomicU64,
     creating: Mutex<CreatingKeyType>,
     main: mpsc::UnboundedSender<MainCommand>,
 }
@@ -127,6 +136,7 @@ impl SessionData {
         main: mpsc::UnboundedSender<MainCommand>,
     ) -> Arc<Self> {
         Arc::new(Self {
+            snapshot: Mutex::new(SessionSnapshot::default()),
             store,
             queues: Mutex::new(RequestQueues::default()),
             options: Mutex::new(SessionOptions::default()),
@@ -134,9 +144,16 @@ impl SessionData {
             environment,
             shifted_dc_id,
             owner_alive: AtomicBool::new(true),
+            next_connection: AtomicU64::new(0),
             creating: Mutex::new(CreatingKeyType::None),
             main,
         })
+    }
+    pub(crate) fn next_connection_id(&self) -> u64 {
+        self.next_connection
+            .fetch_add(1, Ordering::Relaxed)
+            .checked_add(1)
+            .expect("connection identifier exhausted")
     }
     fn with_session(&self, command: MainCommand) {
         if self.owner_alive.load(Ordering::Acquire) {
@@ -359,8 +376,8 @@ pub enum TransportEvent {
         words: tg_tl::Buffer,
         need_http_wait: bool,
     },
-    ReceivedSome,
-    SyncTimeRequest,
+    ReceivedSome(u64),
+    SyncTimeRequest(u64),
 }
 /// The executor owns sockets and queues writes separately from reading. submit
 /// never awaits I/O; next_event is cancellation safe. This permits input while
@@ -372,10 +389,59 @@ pub trait SessionTransport {
 }
 #[derive(Clone)]
 pub struct SessionHandle {
+    data: Arc<SessionData>,
     commands: mpsc::UnboundedSender<SessionCommand>,
     wakeup: Arc<tokio::sync::Notify>,
 }
 impl SessionHandle {
+    pub fn data(&self) -> &Arc<SessionData> {
+        &self.data
+    }
+    pub fn get_state_at(&self, now: i64) -> i32 {
+        let snapshot = self.data.snapshot.lock().unwrap();
+        if !snapshot.private_alive {
+            return DISCONNECTED;
+        }
+        if snapshot.state < 0 {
+            if let Some(at) = snapshot.retry_at {
+                return (now - at).min(-1) as i32;
+            }
+        }
+        snapshot.state
+    }
+    pub fn get_state(&self) -> i32 {
+        self.get_state_at(tg_runtime::now())
+    }
+    pub fn request_state_at(&self, id: i32, now: i64) -> i32 {
+        if !self.data.snapshot.lock().unwrap().private_alive {
+            return 0;
+        }
+        let state = self.get_state_at(now);
+        if state != CONNECTED {
+            return if matches!(state, CONNECTING | DISCONNECTED) {
+                1
+            } else {
+                state
+            };
+        }
+        if id != 0 && self.data.queues.lock().unwrap().to_send.contains_key(&id) {
+            2
+        } else {
+            0
+        }
+    }
+    pub fn request_state(&self, id: i32) -> i32 {
+        self.request_state_at(id, tg_runtime::now())
+    }
+    pub fn transport(&self) -> String {
+        let snapshot = self.data.snapshot.lock().unwrap();
+        if snapshot.private_alive && snapshot.state >= 0 {
+            snapshot.transport.clone()
+        } else {
+            String::new()
+        }
+    }
+
     pub fn send(&self, command: SessionCommand) -> bool {
         self.commands.send(command).is_ok()
     }
@@ -466,9 +532,11 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
         };
         session.refresh_options();
         session.start();
+        let handle_data = session.data.clone();
         (
             session,
             SessionHandle {
+                data: handle_data,
                 commands: command_tx,
                 wakeup,
             },
@@ -630,6 +698,9 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
         self.data.destroy_temporary_key(id);
     }
     pub fn request_state(&self, id: i32) -> i32 {
+        if self.private.is_none() {
+            return 0;
+        }
         let state = self.get_state();
         if state != CONNECTED {
             return if matches!(state, CONNECTING | DISCONNECTED) {
@@ -756,8 +827,16 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
                 words,
                 need_http_wait,
             } => private.on_packet(id, words, need_http_wait),
-            TransportEvent::ReceivedSome => private.on_received_some(),
-            TransportEvent::SyncTimeRequest => private.sync_time_request(),
+            TransportEvent::ReceivedSome(id) => {
+                if private.owns_connection(id) {
+                    private.on_received_some();
+                }
+            }
+            TransportEvent::SyncTimeRequest(id) => {
+                if private.owns_connection(id) {
+                    private.sync_time_request();
+                }
+            }
         }
     }
     pub fn process(&mut self) {
