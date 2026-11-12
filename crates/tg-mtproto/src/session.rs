@@ -16,7 +16,7 @@ use std::{
         Arc, Mutex,
     },
 };
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 #[derive(Clone, Debug)]
 pub struct SessionOptions {
     pub system_lang_code: String,
@@ -85,7 +85,7 @@ pub trait SessionEnvironment: Send + Sync + 'static {
     fn lang_pack_name(&self) -> String;
     fn proxy_settings(&self) -> ProxySettings;
     fn has_callback(&self, request_id: i32) -> bool;
-    fn subscribe(&self) -> broadcast::Receiver<EnvironmentChange>;
+    fn subscribe(&self) -> mpsc::UnboundedReceiver<EnvironmentChange>;
     /// Invoked by this crate only through the tg-runtime main queue.
     fn emit(&self, event: InstanceEvent);
 }
@@ -323,6 +323,7 @@ impl<R: Random> Random for SharedRandom<R> {
 }
 #[derive(Clone, Debug)]
 pub enum SessionCommand {
+    ClientInfo(ClientInfo),
     Send {
         handle: RequestHandle,
         can_wait: i64,
@@ -342,6 +343,10 @@ pub enum SessionCommand {
 }
 #[derive(Debug)]
 pub enum TransportEvent {
+    ConnectTimeout {
+        id: u64,
+        full_timeout: i64,
+    },
     Connected {
         id: u64,
         tag: String,
@@ -394,7 +399,8 @@ pub struct Session<C: SessionClock, R: Random> {
     pending_actions: VecDeque<TransportAction>,
     main: mpsc::UnboundedReceiver<MainCommand>,
     commands: mpsc::UnboundedReceiver<SessionCommand>,
-    changes: broadcast::Receiver<EnvironmentChange>,
+    changes: mpsc::UnboundedReceiver<EnvironmentChange>,
+    changes_open: bool,
     sender: Timer,
     sender_due: Rc<Cell<bool>>,
     wakeup: Arc<tokio::sync::Notify>,
@@ -447,6 +453,7 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
             main,
             commands,
             changes,
+            changes_open: true,
             sender,
             sender_due: due,
             wakeup: wakeup.clone(),
@@ -734,6 +741,9 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
             return;
         };
         match event {
+            TransportEvent::ConnectTimeout { id, full_timeout } => {
+                private.update_connect_timeout(id, full_timeout)
+            }
             TransportEvent::Connected {
                 id,
                 tag,
@@ -773,6 +783,12 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
                     self.unpaused();
                 }
                 SessionCommand::PauseDelivery(paused) => self.paused = paused,
+                SessionCommand::ClientInfo(info) => {
+                    self.info = info.clone();
+                    if let Some(private) = &mut self.private {
+                        private.info = info;
+                    }
+                }
                 SessionCommand::Wake => {}
             }
         }
@@ -810,7 +826,7 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
                 return Ok(());
             }
             let wake = self.wakeup.clone();
-            tokio::select! {event=transport.next_event()=>match event{Ok(event)=>self.on_transport_event(event),Err(error)=>{if let Some(private)=&mut self.private{private.restart();}return Err(error);}},command=self.commands.recv()=>match command{Some(command)=>self.handle_run_command(command),None=>{self.kill();return Ok(());}},change=self.changes.recv()=>if let Ok(change)=change{match change{EnvironmentChange::TemporaryKey(id)=>self.watch_dc_key_changes(id),change=>self.watch_dc_options_changes(change)}},_=wake.notified()=>{}}
+            tokio::select! {event=transport.next_event()=>match event{Ok(event)=>self.on_transport_event(event),Err(error)=>{if let Some(private)=&mut self.private{private.restart();}return Err(error);}},command=self.commands.recv()=>match command{Some(command)=>self.handle_run_command(command),None=>{self.kill();return Ok(());}},change=self.changes.recv(),if self.changes_open=>match change{Some(EnvironmentChange::TemporaryKey(id))=>self.watch_dc_key_changes(id),Some(change)=>self.watch_dc_options_changes(change),None=>self.changes_open=false},_=wake.notified()=>{}}
         }
     }
     fn handle_run_command(&mut self, command: SessionCommand) {
@@ -827,6 +843,12 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
                 self.unpaused();
             }
             SessionCommand::PauseDelivery(paused) => self.paused = paused,
+            SessionCommand::ClientInfo(info) => {
+                self.info = info.clone();
+                if let Some(private) = &mut self.private {
+                    private.info = info;
+                }
+            }
             SessionCommand::Wake => {}
         }
     }

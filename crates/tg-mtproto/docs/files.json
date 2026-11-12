@@ -295,27 +295,27 @@
   },
   {
     "path": "SourceFiles/mtproto/session.cpp",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "crates/tg-mtproto/src/session.rs",
+    "note": "Автомат, окружение и виртуальные base::Timer; 135 функций в docs/session-map.md, независимый duplex server и native envelope."
   },
   {
     "path": "SourceFiles/mtproto/session.h",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "crates/tg-mtproto/src/session.rs",
+    "note": "Автомат, окружение и виртуальные base::Timer; 135 функций в docs/session-map.md, независимый duplex server и native envelope."
   },
   {
     "path": "SourceFiles/mtproto/session_private.cpp",
-    "status": "partial",
+    "status": "done",
     "module": "crates/tg-mtproto/src/session_private.rs",
-    "note": "Только encrypt/decrypt конверта, native reference и проверки; весь автомат, контейнеры/ack/state/retry/PFS ещё требуется."
+    "note": "Автомат, окружение и виртуальные base::Timer; 135 функций в docs/session-map.md, независимый duplex server и native envelope."
   },
   {
     "path": "SourceFiles/mtproto/session_private.h",
-    "status": "partial",
+    "status": "done",
     "module": "crates/tg-mtproto/src/session_private.rs",
-    "note": "Только encrypt/decrypt конверта, native reference и проверки; весь автомат, контейнеры/ack/state/retry/PFS ещё требуется."
+    "note": "Автомат, окружение и виртуальные base::Timer; 135 функций в docs/session-map.md, независимый duplex server и native envelope."
   },
   {
     "path": "SourceFiles/mtproto/mtp_instance.cpp",

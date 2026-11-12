@@ -44,7 +44,7 @@ impl SessionClock for crate::connection_abstract::RuntimeClock {
             .map_or(0, |time| time.as_secs() as i64)
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ClientInfo {
     pub api_id: i32,
     pub app_version: String,
@@ -356,13 +356,18 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         self.timers.old.call_once(192000);
         self.actions
             .push_back(TransportAction::Connect(spec.clone()));
+        let full_timeout = if spec.proxy.try_custom_resolve() {
+            4000 * spec.proxy.resolved_ips.len().max(1) as i64
+        } else {
+            8000
+        };
         self.candidates.insert(
             spec.id,
             Candidate {
                 tag: if http { "HTTP" } else { "TCP" }.into(),
                 spec,
                 connected: false,
-                full_timeout: 8000,
+                full_timeout,
                 sent_key: 0,
             },
         );
@@ -496,6 +501,11 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         self.ping_send_at = 0;
         self.timers.ping.cancel();
         self.timers.connected.call_once(self.wait_connected);
+    }
+    pub fn update_connect_timeout(&mut self, id: u64, timeout: i64) {
+        if let Some(candidate) = self.candidates.get_mut(&id) {
+            candidate.full_timeout = timeout;
+        }
     }
     pub fn on_connected(&mut self, id: u64, is_connected: bool, tag: String, full_timeout: i64) {
         if !is_connected {
@@ -2143,6 +2153,10 @@ impl<C: SessionClock, R: Random> Drop for SessionPrivate<C, R> {
     fn drop(&mut self) {
         self.release_key_creation_on_fail();
         self.do_disconnect();
+        let mut store = self.data.store.lock().unwrap();
+        for (_, handle) in std::mem::take(&mut self.state_requests) {
+            store.remove(handle);
+        }
     }
 }
 fn body_request(body: Buffer, now: i64) -> SerializedRequest {
@@ -2256,6 +2270,18 @@ pub fn compute_app_version(
         AppDistribution::Snap => " Snap",
     };
     format!("{version}{suffix}{package}")
+}
+
+pub const OPTION_PREFER_IPV6: &str = "prefer-ipv6";
+pub fn register_options(
+    registry: &tg_base::options::Registry,
+) -> tg_base::options::OptionHandle<bool> {
+    let mut descriptor = tg_base::options::Descriptor::new(OPTION_PREFER_IPV6);
+    descriptor.name = "Prefer IPv6".into();
+    descriptor.description =
+        r#"Prefer IPv6 if it is available. Require "Try connecting through IPv6" to be enabled"#
+            .into();
+    registry.register(descriptor)
 }
 
 #[cfg(test)]

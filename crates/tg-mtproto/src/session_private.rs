@@ -1,8 +1,5 @@
-//! `session_private`: encrypted-envelope portion of SessionPrivate.
-//!
-//! This module does not yet implement the SessionPrivate request/connection state
-//! machine. Envelope validation preserves `handleReceived`'s ordering and its
-//! treatment of unencrypted TCP padding and out-of-window server time.
+//! SessionPrivate protocol state machine, encrypted envelopes and virtual timers.
+//! The environment and transport executors are supplied by the caller.
 use crate::{
     connection_abstract::TransportError,
     core_types::Buffer,
@@ -137,6 +134,7 @@ pub fn decrypt_message(
 
 mod machine;
 pub use machine::{
-    compute_app_version, log_ids_vector, AppDistribution, ClientInfo, ConnectionSpec, HandleResult,
-    SessionClock, SessionPrivate, TransportAction, CONNECTED, CONNECTING, DISCONNECTED,
+    compute_app_version, log_ids_vector, register_options, AppDistribution, ClientInfo,
+    ConnectionSpec, HandleResult, SessionClock, SessionPrivate, TransportAction, CONNECTED,
+    CONNECTING, DISCONNECTED, OPTION_PREFER_IPV6,
 };

@@ -10,7 +10,7 @@ use std::sync::{
     Mutex,
 };
 use tg_base::timer::ManualClock;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 #[derive(Clone)]
 struct TestClock {
     time: ManualClock,
@@ -66,7 +66,7 @@ struct Env {
     options: Mutex<DcOptions>,
     callbacks: Mutex<BTreeSet<i32>>,
     events: Mutex<Vec<InstanceEvent>>,
-    changes: broadcast::Sender<EnvironmentChange>,
+    changes: ChangeBus,
     destroyer: bool,
     proxy: Mutex<ProxySettings>,
 }
@@ -76,7 +76,7 @@ impl Env {
             options: Mutex::new(DcOptions::new(Environment::Test)),
             callbacks: Mutex::new(BTreeSet::new()),
             events: Mutex::new(vec![]),
-            changes: broadcast::channel(16).0,
+            changes: ChangeBus::default(),
             destroyer: false,
             proxy: Mutex::new(ProxySettings::default()),
         })
@@ -113,7 +113,7 @@ impl SessionEnvironment for Env {
     fn has_callback(&self, id: i32) -> bool {
         self.callbacks.lock().unwrap().contains(&id)
     }
-    fn subscribe(&self) -> broadcast::Receiver<EnvironmentChange> {
+    fn subscribe(&self) -> mpsc::UnboundedReceiver<EnvironmentChange> {
         self.changes.subscribe()
     }
     fn emit(&self, event: InstanceEvent) {
@@ -2286,5 +2286,621 @@ fn dispatch_instances(receiver: &mut mpsc::UnboundedReceiver<MainCommand>, envir
         if let MainCommand::Instance(event) = command {
             crate::session::emit_on_main(environment.clone(), event);
         }
+    }
+}
+
+#[test]
+fn remaining_owner_proxy_timeout_and_clock_contracts() {
+    let _main = main_lock();
+    use crate::session::{Session, SessionParameters};
+    let env = Env::new();
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let dc = Arc::new(Dcenter::new(9, None));
+    let data = SessionData::new(
+        9,
+        dc.clone(),
+        env.clone(),
+        Arc::new(Mutex::new(RequestStore::default())),
+        tx,
+    );
+    for kind in [
+        Type::None,
+        Type::Socks5,
+        Type::Http,
+        Type::Mtproto,
+        Type::Web,
+    ] {
+        *env.proxy.lock().unwrap() = ProxySettings {
+            selected: crate::mtproto_proxy_data::ProxyData {
+                kind,
+                host: "proxy.example.com".into(),
+                port: 1080,
+                ..Default::default()
+            },
+            enabled: true,
+            try_ipv6: true,
+        };
+        data.refresh_options();
+        let options = data.options();
+        assert_eq!(options.use_tcp, kind != Type::Http);
+        assert_eq!(options.use_http, !matches!(kind, Type::Mtproto | Type::Web));
+        assert!(options.use_ipv4 && options.use_ipv6);
+        assert_eq!(options.proxy.kind, kind);
+    }
+    *env.proxy.lock().unwrap() = ProxySettings::default();
+    let clock = TestClock::new();
+    let host = TimerHost::new(Arc::new(clock.time.clone()));
+    let (mut session, _) = Session::new(
+        9,
+        dc,
+        env.clone(),
+        data.store.clone(),
+        SessionParameters {
+            clock,
+            random: Entropy(79),
+            host,
+            info: ClientInfo::default(),
+        },
+    );
+    session.stop();
+    assert_eq!(
+        session.acquire_key_creation(DcType::Cdn),
+        CreatingKeyType::TemporaryRegular
+    );
+    assert!(session.release_cdn_key_creation_on_done(auth()));
+    session.process();
+    dispatch_instances(&mut rx, env.clone());
+    tg_runtime::process_main_queue();
+    assert!(env
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|e| matches!(e, InstanceEvent::DcTemporaryKeyChanged(9))));
+    let mut h = Harness::ready();
+    h.p.info.local_utc_offset = 3600;
+    h.p.clock.unix.store(1700000900, Ordering::SeqCst);
+    let params = h.p.prepare_init_params();
+    assert_eq!(
+        params.c_json_object().value[0]
+            .c_json_object_value()
+            .value
+            .c_json_number()
+            .value,
+        2700.
+    );
+    h.p.clock.unix.store(1700000000, Ordering::SeqCst);
+    h.p.do_disconnect();
+    h.p.connect_to_server(false);
+    let id = *h.p.candidates.keys().next().unwrap();
+    h.p.update_connect_timeout(id, 12000);
+    h.p.wait_connected = 8000;
+    h.p.wait_connected_failed();
+    assert_eq!(h.p.wait_connected, 12000);
+    let mut h = Harness::ready();
+    let id = h.p.key_id;
+    assert_eq!(
+        h.p.data.dc.acquire_key_creation(DcType::Regular),
+        CreatingKeyType::None
+    );
+    h.p.set_current_key_id(id);
+    assert_eq!(h.p.key_id, id);
+    h.p.on_error(h.connection, -429);
+    assert!(h.p.get_state() < 0);
+}
+
+#[derive(Default)]
+struct ChangeBus(Mutex<Vec<mpsc::UnboundedSender<EnvironmentChange>>>);
+impl ChangeBus {
+    fn subscribe(&self) -> mpsc::UnboundedReceiver<EnvironmentChange> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.0.lock().unwrap().push(tx);
+        rx
+    }
+    fn send(
+        &self,
+        event: EnvironmentChange,
+    ) -> Result<usize, mpsc::error::SendError<EnvironmentChange>> {
+        let mut subscribers = self.0.lock().unwrap();
+        subscribers.retain(|sender| sender.send(event.clone()).is_ok());
+        if subscribers.is_empty() {
+            Err(mpsc::error::SendError(event))
+        } else {
+            Ok(subscribers.len())
+        }
+    }
+}
+
+#[test]
+fn bounded_ack_cache_service_ownership_and_registered_preferences() {
+    let _main = main_lock();
+    let mut h = Harness::ready();
+    let mut ids = vec![];
+    for id in 1..=401 {
+        let mut request = body_request(vec![1], 100);
+        request.request_id = id;
+        request.set_msg_id((1700000000u64 << 32) + id as u64 * 4);
+        let handle = h.p.data.register_request(request);
+        let msg = (1700000000u64 << 32) + id as u64 * 4;
+        h.p.data
+            .queues
+            .lock()
+            .unwrap()
+            .have_sent
+            .insert(msg, handle);
+        ids.push(msg);
+    }
+    h.p.requests_acked(&ids, false);
+    assert_eq!(h.p.acked.len(), 400);
+    assert!(!h.p.acked.contains_key(&ids[0]));
+    h.p.state_ids.insert(ids[400]);
+    h.p.try_to_send();
+    let handle = *h.p.state_requests.values().next().unwrap();
+    let store = h.p.data.store.clone();
+    drop(h.p);
+    assert!(store.lock().unwrap().get(handle).is_none());
+    let clock = ManualClock::new(0);
+    let host = TimerHost::new(Arc::new(clock));
+    let registry = tg_base::options::Registry::new(&host);
+    let option = register_options(&registry);
+    assert!(!option.value());
+    assert_eq!(option.id(), "prefer-ipv6");
+    assert!(option
+        .description()
+        .contains("\"Try connecting through IPv6\""));
+    option.set(true);
+    assert!(registry.lookup::<bool>(OPTION_PREFER_IPV6).value());
+    let env = Env::new();
+    let (mut session, handle) = crate::session::Session::new(
+        2,
+        Arc::new(Dcenter::new(2, None)),
+        env.clone(),
+        Arc::new(Mutex::new(RequestStore::default())),
+        crate::session::SessionParameters {
+            clock: TestClock::new(),
+            random: Entropy(4),
+            host: host.clone(),
+            info: ClientInfo::default(),
+        },
+    );
+    session.take_transport_actions();
+    session.stop();
+    handle.send(crate::session::SessionCommand::ClientInfo(ClientInfo {
+        prefer_ipv6: option.value(),
+        ..ClientInfo::default()
+    }));
+    session.process();
+    session.need_to_resume_and_send();
+    let actions = session.take_transport_actions();
+    let ips = actions
+        .into_iter()
+        .filter_map(|action| {
+            if let TransportAction::Connect(spec) = action {
+                Some(spec)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    assert!(!ips.is_empty());
+    let mut receiver = env.subscribe();
+    for id in 0..128 {
+        env.changes
+            .send(EnvironmentChange::TemporaryKey(id))
+            .unwrap();
+    }
+    for id in 0..128 {
+        assert!(
+            matches!(receiver.try_recv(),Ok(EnvironmentChange::TemporaryKey(value))if value==id)
+        );
+    }
+    session.process();
+    assert_eq!(session.get_state(), CONNECTING);
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[allow(clippy::await_holding_lock)]
+async fn duplex_server_bad_messages_salt_new_session_gzip_and_containers() {
+    let _main = main_lock();
+    use crate::session::{Session, SessionCommand, SessionParameters};
+    for scenario in [
+        16, 17, 18, 19, 20, 32, 33, 34, 35, 48, 64, 999, 1000, 1001, 1002, 1003,
+    ] {
+        let env = Env::new();
+        env.callbacks.lock().unwrap().insert(77);
+        let dc = Arc::new(Dcenter::new(2, None));
+        let creation = dc.acquire_key_creation(DcType::Regular);
+        dc.release_key_creation_on_done(
+            creation,
+            auth(),
+            Some(Arc::new(AuthKey::new(KeyType::Generated, 2, [3; 256], 1))),
+        );
+        let clock = TestClock::new();
+        let host = TimerHost::new(Arc::new(clock.time.clone()));
+        let (session, handle) = Session::new(
+            2,
+            dc,
+            env.clone(),
+            Arc::new(Mutex::new(RequestStore::default())),
+            SessionParameters {
+                clock: clock.clone(),
+                random: Entropy(0x2468),
+                host,
+                info: ClientInfo::default(),
+            },
+        );
+        let mut request = body_request(vec![0xc4f9186b_u32 as i32], 100);
+        request.request_id = 77;
+        request.force_send_in_container = true;
+        let request = session.data.register_request(request);
+        handle.send(SessionCommand::Send {
+            handle: request,
+            can_wait: 0,
+        });
+        let (transport, mut streams) = DuplexTransport::new();
+        let wake = Arc::new(tokio::sync::Notify::new());
+        let waker = wake.clone();
+        tg_runtime::main_queue().set_waker(Some(Arc::new(move || waker.notify_one())));
+        let script = async {
+            let mut peer = ServerTcp::new(streams.recv().await.unwrap()).await;
+            let ping = peer.read_encrypted().await;
+            peer.reply(
+                ping.session_id,
+                (1700000000u64 << 32) | 1,
+                vec![
+                    0x347773c5,
+                    ping.msg_id as i32,
+                    (ping.msg_id >> 32) as i32,
+                    ping.body[1],
+                    ping.body[2],
+                ],
+            )
+            .await;
+            let message = peer.read_encrypted().await;
+            let (id, _) = contained_requests(&message)
+                .into_iter()
+                .find(|(_, body)| body[0] as u32 == 0xc4f9186b)
+                .unwrap();
+            let bad_id = if scenario == 64 { message.msg_id } else { id };
+            let salt = if scenario == 1000 { 200 } else { 100 };
+            let direct = matches!(scenario, 1002 | 1003);
+            let fatal = !matches!(scenario, 16 | 17 | 32 | 33 | 64 | 1000 | 1001 | 1002 | 1003);
+            let mut body = if scenario == 1000 {
+                vec![
+                    0xedab447b_u32 as i32,
+                    id as i32,
+                    (id >> 32) as i32,
+                    3,
+                    48,
+                    salt as i32,
+                    0,
+                ]
+            } else if scenario == 1001 {
+                vec![
+                    0x9ec20908_u32 as i32,
+                    (id + 4) as i32,
+                    ((id + 4) >> 32) as i32,
+                    7,
+                    0,
+                    100,
+                    0,
+                ]
+            } else if direct {
+                let mut reply = vec![RPC_RESULT as i32, id as i32, (id >> 32) as i32];
+                if scenario == 1002 {
+                    reply.push(GZIP_PACKED as i32);
+                    tg_tl::write_string(&mut reply, include_bytes!("../../tests/fixtures/true.gz"));
+                } else {
+                    reply.push(0x997275b5_u32 as i32);
+                    let mut outer = vec![
+                        MSG_CONTAINER as i32,
+                        1,
+                        33,
+                        1700000000,
+                        1,
+                        (reply.len() * 4) as i32,
+                    ];
+                    outer.extend(reply);
+                    reply = outer;
+                }
+                reply
+            } else {
+                vec![
+                    0xa7eff811_u32 as i32,
+                    bad_id as i32,
+                    (bad_id >> 32) as i32,
+                    3,
+                    scenario,
+                ]
+            };
+            peer.reply(
+                message.session_id,
+                (1700000000u64 << 32) | 101,
+                std::mem::take(&mut body),
+            )
+            .await;
+            if !fatal && !direct {
+                if matches!(scenario, 32 | 33) {
+                    loop {
+                        tg_runtime::process_main_queue();
+                        if env
+                            .events
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .any(|e| matches!(e,InstanceEvent::StateChange(2,state)if *state<0))
+                        {
+                            break;
+                        }
+                        wake.notified().await;
+                    }
+                    clock.time.advance(1);
+                    handle.wake();
+                    peer = ServerTcp::new(streams.recv().await.unwrap()).await;
+                } else if scenario == 1001 {
+                    loop {
+                        tg_runtime::process_main_queue();
+                        if env.events.lock().unwrap().iter().any(|e|matches!(e,InstanceEvent::Update(r)if r.reply.first().is_some_and(|id|*id as u32==0x9ec20908))){break;}
+                        wake.notified().await;
+                    }
+                    clock.time.advance(10);
+                    handle.wake();
+                }
+                let resent = peer.read_encrypted().await;
+                assert_eq!(resent.salt, salt);
+                if matches!(scenario, 32 | 33) {
+                    assert_ne!(resent.session_id, message.session_id);
+                }
+                let (retry_id, _) = contained_requests(&resent)
+                    .into_iter()
+                    .find(|(_, body)| body[0] as u32 == 0xc4f9186b)
+                    .unwrap();
+                let packet = server_encrypt(&Message {
+                    salt,
+                    session_id: resent.session_id,
+                    msg_id: (1700000000u64 << 32) | 105,
+                    seq_no: 1,
+                    body: vec![
+                        RPC_RESULT as i32,
+                        retry_id as i32,
+                        (retry_id >> 32) as i32,
+                        0x997275b5_u32 as i32,
+                    ],
+                });
+                peer.write(&packet).await;
+            }
+            loop {
+                tg_runtime::process_main_queue();
+                if env
+                    .events
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|e| matches!(e,InstanceEvent::Callback(r)if r.request_id==77))
+                {
+                    break;
+                }
+                wake.notified().await;
+            }
+            let events = env.events.lock().unwrap();
+            let callbacks: Vec<_> = events
+                .iter()
+                .filter_map(|e| {
+                    if let InstanceEvent::Callback(r) = e {
+                        Some(r)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            assert_eq!(callbacks.len(), 1, "scenario {scenario}");
+            assert_eq!(
+                callbacks[0].reply[0] as u32,
+                if fatal { 0x2144ca19 } else { 0x997275b5 }
+            );
+            drop(events);
+            handle.send(SessionCommand::Kill);
+        };
+        let (result, ()) = tokio::join!(session.run(transport), script);
+        result.unwrap();
+        tg_runtime::process_main_queue();
+        tg_runtime::main_queue().set_waker(None);
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[allow(clippy::await_holding_lock)]
+async fn duplex_server_state_requests_resend_requests_and_acks() {
+    let _main = main_lock();
+    use crate::session::{Session, SessionCommand, SessionParameters};
+    for resend_answer in [false, true] {
+        let env = Env::new();
+        env.callbacks.lock().unwrap().insert(77);
+        let dc = Arc::new(Dcenter::new(2, None));
+        let creation = dc.acquire_key_creation(DcType::Regular);
+        dc.release_key_creation_on_done(
+            creation,
+            auth(),
+            Some(Arc::new(AuthKey::new(KeyType::Generated, 2, [3; 256], 1))),
+        );
+        let clock = TestClock::new();
+        let host = TimerHost::new(Arc::new(clock.time.clone()));
+        let (session, handle) = Session::new(
+            2,
+            dc,
+            env.clone(),
+            Arc::new(Mutex::new(RequestStore::default())),
+            SessionParameters {
+                clock: clock.clone(),
+                random: Entropy(0x2468),
+                host,
+                info: ClientInfo::default(),
+            },
+        );
+        let mut request = body_request(vec![0xc4f9186b_u32 as i32], 100);
+        request.request_id = 77;
+        request.force_send_in_container = true;
+        let request = session.data.register_request(request);
+        handle.send(SessionCommand::Send {
+            handle: request,
+            can_wait: 0,
+        });
+        let (transport, mut streams) = DuplexTransport::new();
+        let wake = Arc::new(tokio::sync::Notify::new());
+        let waker = wake.clone();
+        tg_runtime::main_queue().set_waker(Some(Arc::new(move || waker.notify_one())));
+        fn marker(first: Buffer, low: i32) -> Buffer {
+            let mut body = vec![
+                MSG_CONTAINER as i32,
+                2,
+                low,
+                1700000000,
+                0,
+                (first.len() * 4) as i32,
+            ];
+            body.extend(first);
+            body.extend([low + 4, 1700000000, 0, 4, 0x997275b5_u32 as i32]);
+            body
+        }
+        let script = async {
+            let mut peer = ServerTcp::new(streams.recv().await.unwrap()).await;
+            let ping = peer.read_encrypted().await;
+            peer.reply(
+                ping.session_id,
+                (1700000000u64 << 32) | 1,
+                vec![
+                    0x347773c5,
+                    ping.msg_id as i32,
+                    (ping.msg_id >> 32) as i32,
+                    ping.body[1],
+                    ping.body[2],
+                ],
+            )
+            .await;
+            let message = peer.read_encrypted().await;
+            let (id, _) = contained_requests(&message)
+                .into_iter()
+                .find(|(_, body)| body[0] as u32 == 0xc4f9186b)
+                .unwrap();
+            let answer = (1700000000u64 << 32) | 901;
+            let first = if resend_answer {
+                vec![
+                    0x276d3ec6,
+                    id as i32,
+                    (id >> 32) as i32,
+                    answer as i32,
+                    (answer >> 32) as i32,
+                    4,
+                    0,
+                ]
+            } else {
+                id_vector(0x62d6b459, &[id])
+            };
+            peer.reply(
+                message.session_id,
+                (1700000000u64 << 32) | 101,
+                marker(first, 33),
+            )
+            .await;
+            loop {
+                tg_runtime::process_main_queue();
+                if env
+                    .events
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|e| matches!(e, InstanceEvent::Update(_)))
+                {
+                    break;
+                }
+                wake.notified().await;
+            }
+            clock.time.advance(10000);
+            handle.wake();
+            let state = peer.read_encrypted().await;
+            let records = contained_requests(&state);
+            let constructor = if resend_answer {
+                0x7d861a08
+            } else {
+                0xda69fb52
+            };
+            let (state_id, body) = records
+                .iter()
+                .find(|(_, body)| body[0] as u32 == constructor)
+                .unwrap();
+            let mut cursor = Cursor::new(&body[1..]);
+            assert_eq!(
+                cursor.ids().unwrap(),
+                [if resend_answer { answer } else { id }]
+            );
+            let final_id = if resend_answer {
+                answer
+            } else {
+                (1700000000u64 << 32) | 109
+            };
+            let mut rpc_id = id;
+            if !resend_answer {
+                let mut info = vec![0x04deb57d, *state_id as i32, (*state_id >> 32) as i32];
+                tg_tl::write_string(&mut info, &[3]);
+                peer.reply(
+                    message.session_id,
+                    (1700000000u64 << 32) | 105,
+                    marker(info, 41),
+                )
+                .await;
+                loop {
+                    tg_runtime::process_main_queue();
+                    if env
+                        .events
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .filter(|e| matches!(e, InstanceEvent::Update(_)))
+                        .count()
+                        >= 2
+                    {
+                        break;
+                    }
+                    wake.notified().await;
+                }
+                clock.time.advance(10);
+                handle.wake();
+                let retry = peer.read_encrypted().await;
+                rpc_id = contained_requests(&retry)
+                    .into_iter()
+                    .find(|(_, body)| body[0] as u32 == 0xc4f9186b)
+                    .unwrap()
+                    .0;
+            }
+            peer.reply(
+                message.session_id,
+                final_id,
+                vec![
+                    RPC_RESULT as i32,
+                    rpc_id as i32,
+                    (rpc_id >> 32) as i32,
+                    0x997275b5_u32 as i32,
+                ],
+            )
+            .await;
+            loop {
+                tg_runtime::process_main_queue();
+                if env
+                    .events
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|e| matches!(e,InstanceEvent::Callback(r)if r.request_id==77))
+                {
+                    break;
+                }
+                wake.notified().await;
+            }
+            handle.send(SessionCommand::Kill);
+        };
+        let (result, ()) = tokio::join!(session.run(transport), script);
+        result.unwrap();
+        tg_runtime::process_main_queue();
+        tg_runtime::main_queue().set_waker(None);
     }
 }

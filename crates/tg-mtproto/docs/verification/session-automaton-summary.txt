@@ -1,0 +1,10 @@
+Rust: 1.95.0 (pinned nix develop)
+Command: nix develop --command bash -euc 'cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace'
+cargo fmt --check: exit 0
+cargo clippy --workspace --all-targets -- -D warnings: exit 0
+cargo test --workspace: exit 0; 549 passed, 0 failed, 2 ignored
+New ordinary tests in this task: 24 (23 session scenarios, 1 native receive fixture test)
+Session map: 135 functions; 135 associated with tests; 3 additionally have native envelope reference coverage; 0 reading-only functions.
+Native receive cases: 19; original handleReceived envelope prefix executed, not the whole C++ QObject/session dispatcher.
+Live tests: not run in this task; help.getConfig/account/production requests not made.
+New dependencies: none in this task.

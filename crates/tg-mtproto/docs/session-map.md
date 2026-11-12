@@ -1,6 +1,6 @@
 # Карта перевода сессии
 
-Оригинал: `0f2a31bb420de98f331990432265b131b8d836b5`. Определения функций, inline методы заголовка и четыре свободных helper учитываются один раз. Карта в работе до завершения всех указанных проверок.
+Оригинал: `0f2a31bb420de98f331990432265b131b8d836b5`. Определения функций, inline методы заголовка и четыре свободных helper учитываются один раз. 135 строк закрыты: у каждой указан перевод и существующий тест. Нативные образцы покрывают 3 строки частично, только чтением не оставлено ни одной функции. Реальные Qt/OS integration не выдаются за проверку запуском.
 
 | Оригинал | Назначение | Rust | Проверка |
 |---|---|---|---|
@@ -42,7 +42,7 @@
 | `session_private.cpp:1262 SessionPrivate::connectingTimedOut` | Сообщает кандидатам об истечении срока и отключается | `SessionPrivate::connecting_timed_out` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
 | `session_private.cpp:1269 SessionPrivate::doDisconnect` | Закрывает транспорт и выставляет Disconnected | `SessionPrivate::do_disconnect` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
 | `session_private.cpp:1274 SessionPrivate::requestCDNConfig` | Ставит запрос ключей CDN в главный поток | `SessionPrivate::request_cdn_config` | `connection_priority_failover_options_and_cdn_gating` |
-| `session_private.cpp:1280 SessionPrivate::handleReceived` | Проверяет конверт, salt, received IDs и результат диспетчеризации | `SessionPrivate::handle_received` | `initial_salt_ping_sequence_and_rpc_delivery; native `original_handle_received_envelope_checks` (конверт до dispatcher)` |
+| `session_private.cpp:1280 SessionPrivate::handleReceived` | Проверяет конверт, salt, received IDs и результат диспетчеризации | `SessionPrivate::handle_received` | `initial_salt_ping_sequence_and_rpc_delivery`; native `original_handle_received_envelope_checks` (конверт до dispatcher) |
 | `session_private.cpp:1460 SessionPrivate::handleOneReceived` | Разбирает контейнеры, gzip, RPC и служебные ответы | `SessionPrivate::handle_one_received` | `initial_salt_ping_sequence_and_rpc_delivery` |
 | `session_private.cpp:2033 SessionPrivate::handleBindResponse` | Обрабатывает успешную и неуспешную привязку временного ключа | `SessionPrivate::handle_bind_response` | `binding_success_failure_persistent_age_and_key_destruction` |
 | `session_private.cpp:2063 SessionPrivate::ungzip` | Распаковывает gzip с общим бюджетом и проверкой выравнивания | `SessionPrivate::ungzip` | `gzip_container_budget_parse_errors_and_replay_window` |
@@ -69,7 +69,7 @@
 | `session_private.cpp:2666 SessionPrivate::onError` | Обрабатывает ошибки кандидатов, включая -429 и -444 | `SessionPrivate::on_error` | `binding_success_failure_persistent_age_and_key_destruction` |
 | `session_private.cpp:2686 SessionPrivate::handleError` | Различает потерю ключа -404 и обычный сетевой сбой | `SessionPrivate::handle_error` | `binding_success_failure_persistent_age_and_key_destruction` |
 | `session_private.cpp:2698 SessionPrivate::destroyTemporaryKey` | Удаляет временный ключ и уведомляет о смене | `SessionPrivate::destroy_temporary_key` | `binding_success_failure_persistent_age_and_key_destruction` |
-| `session_private.cpp:2713 SessionPrivate::sendSecureRequest` | Дополняет и шифрует сообщение MTProto 2.0 | `SessionPrivate::send_secure_request` | `initial_salt_ping_sequence_and_rpc_delivery; native `original_send_secure_request_with_fixed_entropy`` |
+| `session_private.cpp:2713 SessionPrivate::sendSecureRequest` | Дополняет и шифрует сообщение MTProto 2.0 | `SessionPrivate::send_secure_request` | `initial_salt_ping_sequence_and_rpc_delivery`; native `original_send_secure_request_with_fixed_entropy` |
 | `session_private.cpp:2771 SessionPrivate::wasSent` | Ищет сообщение в отправленных, подтверждённых и специальных индексах | `SessionPrivate::was_sent` | `state_requests_reply_info_and_cancellation` |
 | `session_private.cpp:2798 SessionPrivate::clearUnboundKeyCreator` | Останавливает незавершённый DH, сохраняя binder | `SessionPrivate::clear_unbound_key_creator` | `binding_success_failure_persistent_age_and_key_destruction` |
 | `session_private.cpp:2804 SessionPrivate::releaseKeyCreationOnFail` | Освобождает владение созданием ключа | `SessionPrivate::release_key_creation_on_fail` | `binding_success_failure_persistent_age_and_key_destruction` |
@@ -92,7 +92,7 @@
 | `session.cpp:149 SessionData::detach` | Запрещает команды и чтение ключей после удаления владельца | `SessionData::detach` | `session_data_options_keys_and_notifications` |
 | `session.cpp:154 Session::Session` | Создаёт данные, подписки, sender timer и автомат | `Session::new` | `session_data_options_keys_and_notifications` |
 | `session.cpp:171 Session::~Session` | Останавливает автомат и освобождает захваченное создание ключа | `Drop for Session` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
-| `session.cpp:179 Session::watchDcKeyChanges` | Реагирует только на изменения ключей своего DC | `Session::watch_dc_key_changes` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:179 Session::watchDcKeyChanges` | Реагирует только на изменения ключей своего DC | `Session::watch_dc_key_changes` | `bounded_ack_cache_service_ownership_and_registered_preferences` |
 | `session.cpp:196 Session::watchDcOptionsChanges` | Реагирует на адреса своего DC и ключи CDN | `Session::watch_dc_options_changes` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
 | `session.cpp:217 Session::start` | Заменяет остановленный автомат новым | `Session::start` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
 | `session.cpp:226 Session::restart` | Закрывает соединение и ставит повтор с нужной задержкой | `Session::restart` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
@@ -114,7 +114,7 @@
 | `session.cpp:423 Session::sendPrepared` | Обнуляет wire header и ставит подготовленный запрос в очередь | `Session::send_prepared` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
 | `session.cpp:443 Session::acquireKeyCreation` | Захватывает право создавать ключ DC | `Session::acquire_key_creation` | `session_data_options_keys_and_notifications` |
 | `session.cpp:450 Session::releaseKeyCreationOnDone` | Публикует привязанный временный и постоянный ключи | `Session::release_key_creation_on_done` | `session_data_options_keys_and_notifications` |
-| `session.cpp:461 Session::releaseCdnKeyCreationOnDone` | Публикует временный ключ CDN без привязки | `Session::release_cdn_key_creation_on_done` | `session_data_options_keys_and_notifications` |
+| `session.cpp:461 Session::releaseCdnKeyCreationOnDone` | Публикует временный ключ CDN без привязки | `Session::release_cdn_key_creation_on_done` | `remaining_owner_proxy_timeout_and_clock_contracts` |
 | `session.cpp:468 Session::releaseGenericKeyCreationOnDone` | Завершает захват DC и уведомляет о записи ключей | `SessionData::release_generic_key_creation_on_done` | `session_data_options_keys_and_notifications` |
 | `session.cpp:501 Session::releaseKeyCreationOnFail` | Освобождает владение созданием ключа | `Session::release_key_creation_on_fail` | `session_data_options_keys_and_notifications` |
 | `session.cpp:510 Session::notifyDcConnectionInited` | Помечает DC инициализированным | `Session::notify_dc_connection_inited` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
@@ -128,7 +128,7 @@
 | `session_private.cpp LogIdsVector` | Форматирует диагностический список с сохранением повтора первого ID | `log_ids_vector` | `source_log_version_timezone_and_protocol_dc_rules` |
 | `session_private.cpp ComputeAppVersion` | Добавляет архитектуру и суффикс дистрибутива к версии | `compute_app_version` | `source_log_version_timezone_and_protocol_dc_rules` |
 | `session_private.cpp WrapInvokeAfter` | Добавляет зависимость только от ещё отправленного запроса | `SessionPrivate::wrap_invoke_after` | `container_limits_invoke_after_layer_and_sequence_wrap` |
-| `session_private.cpp ConstTimeIsDifferent` | Сравнивает байты msg_key без раннего выхода | `tg_base::openssl_help::const_time_equal` | `original_handle_received_envelope_checks; native `original_handle_received_envelope_checks` (конверт до dispatcher)` |
+| `session_private.cpp ConstTimeIsDifferent` | Сравнивает байты msg_key без раннего выхода | `tg_base::openssl_help::const_time_equal` | `original_handle_received_envelope_checks` (native, конверт до dispatcher) |
 | `session.h SessionData::SessionData` | Создаёт общие данные и связь с владельцем | `SessionData::new` | `session_data_options_keys_and_notifications` |
 | `session.h SessionData::setOptions` | Записывает снимок опций под блокировкой | `SessionData::set_options` | `session_data_options_keys_and_notifications` |
 | `session.h SessionData::options` | Читает снимок опций под блокировкой | `SessionData::options` | `session_data_options_keys_and_notifications` |
@@ -139,3 +139,11 @@
 | `session.h SessionData::haveSentMap` | Даёт индекс отправленных сообщений | `SessionData::queues: Mutex<RequestQueues>` | `session_data_options_keys_and_notifications` |
 | `session.h SessionData::haveReceivedMessages` | Даёт очередь ответов главного потока | `SessionData::queues: Mutex<RequestQueues>` | `session_data_options_keys_and_notifications` |
 | `session.h SessionOptions::default` | Задаёт исходные значения SessionOptions | `SessionOptions::default` | `session_data_options_keys_and_notifications` |
+
+
+Статическая настройка OptionPreferIPv6 заменена явным register_options в tg-base
+Registry; проверка bounded_ack_cache_service_ownership_and_registered_preferences.
+Дополнительные транспортные адаптеры/контракты не увеличивают число функций
+оригинала. Drop и прямые Mutex-поля учитываются как замена соответствующих C++
+обёрток, а не как пропущенные функции. Источник platform metadata явно передан
+через ClientInfo; его получение настоящей ОС не является native проверкой.
