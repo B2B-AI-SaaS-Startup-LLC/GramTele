@@ -263,9 +263,9 @@ JSON сохраняет поддержанные scalar types; точные те
 
 ## Зависимости и нехватка готовых крейтов
 
-Новые direct dependencies этой работы: `tg-runtime` (workspace 0.0.0) и
-`serde_json = "1"` (разрешено 1.0.154 при проверке).
-`tg-rpl` (0.0.0) уже был зависимостью. Остальное — std; для single_instance используется
+Новая direct dependency относительно main: `serde_json = "1"`
+(разрешено 1.0.154 при проверке). Используются существующие
+`tg-runtime` (workspace 0.0.0) и `tg-rpl` (0.0.0). Остальное — std; для single_instance используется
 существующий FileLock (nix на Linux), CRC32 из готового tg-base.
 zbus/GLib/signal-hook не добавлены; решения о desktop backend оставлены до соответствующего этапа.
 

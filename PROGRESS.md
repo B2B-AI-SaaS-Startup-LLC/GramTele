@@ -129,3 +129,77 @@ base-runtime/codegen не изменялись. Cargo.lock не добавлял
 Полный отчёт по файлам, таблица C++ → Rust с примерами клиента, версии
 крейтов, эталоны, вывод команд и отличия:
 `crates/tg-base/docs/crypto-bytes-time.md`.
+
+### tg-base: таймеры, служебные части и аудит Linux/Qt (2026-11-12)
+
+- Работа выполнена в `base-runtime`, ветка `port/tg-base-runtime`.
+  Унаследованные файлы сохранены как есть коммитом `7ea2f4e`
+  (`wip: tg-base timers (unfinished)`), затем main влит коммитом `80b45d0`.
+  Реализация и документация — `0f057d2`; ветка влита в main.
+- Пофайловое решение для **118 файлов**, включая каждый общий platform/,
+  platform/linux и 7 XML: [timers-and-process.md](crates/tg-base/docs/timers-and-process.md).
+  Из 111 файлов, присутствующих в ledger: 23 done, 24 partial, 3 replaced,
+  61 todo (явно отложены с этапом и зависимостями). XML отсутствуют в исходном
+  code ledger и перечислены в документе. stage=1 в ledger сохраняет исходную
+  принадлежность lib_base; этап возврата указан в документе.
+- Полностью: timer, concurrent_timer, timer_rpl, call_delayed, invoke_queued,
+  options, debug_destroy_informer, platform-independent system_unlock и
+  настоящий Linux fallback system_unlock/layout_switch/network Create=None.
+  base_pch и tests_main заменены модулями Cargo и libtest.
+- Унаследованный код перечитан и проверен: исправлены оставленные вне lib.rs
+  модули, цикл владения BatterySaving/helper callback, семантика Adjust и
+  remainingTime, сброс HTTP времени при CheckLocalTime. Таймеры проверяются
+  виртуальными Clock/Alarm без sleep, включая реальную очередь tg-runtime.
+- Долги Alive/AsGuard и profile_log закрыты: Alive — alias GuardToken из
+  tg-runtime, WeakPtr/HasWeakPtr/BinaryGuard реализуют AsGuard; BinaryGuardToken
+  не убивает пару при drop клона; profile_log использует tg_runtime::profile.
+  tg-runtime и tg-rpl не изменялись.
+- Частично: single_instance (Linux FileLock/Unix socket, wire и имя Qt,
+  readiness polling; активация окна/автоматическая доставка — этап 5/6),
+  integration (logging singleton/executable info), crash_report_header
+  (owned formatter, не signal handler), generic battery/network/power-save/
+  last-input/screen-reader, custom_app_icon (QImage overload ждёт этапа 5),
+  platform file utilities (fs operations, не desktop opener).
+- Отложены: event_filter, qt_connection, qt_signal_producer, object_ptr,
+  unique_qptr, weak_qptr и qt/ до оконного/текстового слоя (4/5);
+  global_shortcuts/generic и Linux desktop backend-и до 6, MPRIS/player до 7.
+  D-Bus, порталы, GLib, XCB, AT-SPI требуют реальной сессии рабочего стола.
+  CrashReportWriter — этап 6: безопасный high-level signal-hook не разрешает
+  fatal SIGSEGV/SIGILL/SIGFPE; low-level API требует unsafe. Варианты:
+  отдельный FFI-крейт Crashpad/Breakpad либо внешний crash helper.
+  platform/mac и platform/win не трогались.
+- Отличия: Fn/FnMut callbacks, явные Registry/handles, coarse timer types
+  сохраняются без coalescing; равные deadlines упорядочены по старту;
+  PowerSaveBlocker выбирает первый id вместо адреса C++ и ждёт tg-window
+  для автообнуления WindowId. Две ошибки ConcurrentTimer C++ сохранены и
+  проверены: callEach фактически одноразовый, cancel не отменяет method
+  environment из-за порядка reset guard/isActive, но guard блокирует вызов.
+  DeleteDirectory сохраняет исходный переход по symlink и последующий failure.
+- Проверено тестами: Timer lifecycle/order/adjust, queued guards/coalescing,
+  fake system helpers, options Qt JSON sample, atomic import, delayed write,
+  lenient int read, IPC двумя процессами/фрагментация/фиксированный wire,
+  portable filesystem и crash formatter. Только чтением: соответствия Qt
+  JSON/timer/local socket и границы отложенных интерфейсов. Нативный Qt-клиент,
+  перевод системных часов/suspend, D-Bus/desktop backend и crash signals
+  запуском в этой среде не проверены. Образец JSON выписан по QJsonWriter 6.8,
+  не снят с запущенного Qt-клиента; не объявляется проверкой всех Unicode cases.
+- Зависимости: добавлен serde_json="1" (при проверке 1.0.154); используется
+  существующий tg-runtime=0.0.0 и tg-rpl=0.0.0. zbus, GLib и signal-hook
+  не добавлены. В tg-runtime отсутствует deadline/alarm/reactor API — Clock/Alarm
+  реализованы в tg-base; глобальные часы не инъецируются, тесты используют
+  отдельный Clock и injected adjust decision. В tg-rpl нет QObject bridge и
+  Send producers; rpl остаётся на главном потоке, background timer использует runner.
+- Три команды через Nix: `cargo fmt --check` — exit 0, пустой вывод;
+  `cargo clippy --workspace --all-targets -- -D warnings` — exit 0,
+  Finished dev profile in 29.68s (включая build lock), без предупреждений;
+  `cargo test --workspace` — exit 0, **424 теста, 0 failed, 0 ignored**.
+  tg-base: **208 unit + 22 integration + 1 doctest = 231**, прирост к main
+  до этой работы — **75** (66 unit + 9 integration). Повторный запуск helper
+  в дочернем процессе не посчитан дважды. Полные логи:
+  `/tmp/base-runtime-verified-{fmt,clippy,tests}.log`.
+- TL: таблица tg-scheme README расширена до **27 строк** с SourceFiles/путями
+  и реальными клиентскими выражениями. Чистая сборка в разных пустых target-dir
+  (Nix, rustc/cargo 1.95.0, x86_64 Linux, warm download cache, без параллельной
+  компиляции): debug **82.927 с**, release **194.744 с**, обе exit 0.
+  Команды и CPU times записаны в README. MTProto dispatcher остаётся этапом 2.
+- Cargo.lock не добавлен, push не выполнялся. Этап 2 не начат.
