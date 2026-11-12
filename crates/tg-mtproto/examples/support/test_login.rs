@@ -25,7 +25,11 @@ impl Harness {
     }
     pub fn add(&mut self) -> usize {
         let mut fields = Fields::new(Environment::Test);
-        fields.main_dc_id = phone_dc();
+        fields.main_dc_id = if std::env::var_os("AYUGRAM_LOGIN_ORIGINAL_PREFLIGHT").is_some() {
+            0
+        } else {
+            phone_dc()
+        };
         self.add_fields(fields)
     }
     pub fn add_fields(&mut self, mut fields: Fields) -> usize {
@@ -158,8 +162,16 @@ pub async fn login_code(h: &mut Harness) -> Result<usize, String> {
             return Err("eight-attempt login budget exhausted".into());
         }
     }
-    println!("test phone: {phone}; initial DC={}", phone_dc());
+    println!(
+        "test phone: {phone}; initial DC={}",
+        h.senders[first].instance().main_dc_id()
+    );
     if std::env::var_os("AYUGRAM_LOGIN_ORIGINAL_PREFLIGHT").is_some() {
+        let config = h.rpc(first, HelpGetConfig::new()).await?;
+        println!(
+            "intro getConfig: received {} bytes",
+            tg_tl::serialize(&config).len() * 4
+        );
         let nearest = h.rpc(first, HelpGetNearestDc::new()).await?;
         println!(
             "intro nearest: {}",
@@ -286,4 +298,84 @@ fn phone_dc() -> i32 {
         .unwrap_or(2);
     assert!((1..=3).contains(&dc));
     dc
+}
+
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+
+pub async fn login_qr(h: &mut Harness, first: usize) -> Result<(), String> {
+    let second = h.add();
+    let update = Arc::new(AtomicBool::new(false));
+    let notified = update.clone();
+    h.senders[second]
+        .instance()
+        .set_updates_handler(Some(Box::new(move |response| {
+            use tg_tl::Deserialize;
+            let mut reader = tg_tl::Reader::new(&response.reply);
+            let has = |u: &Update| matches!(u, Update::UpdateLoginToken(_));
+            let found = match Updates::read(&mut reader) {
+                Ok(Updates::UpdateShort(d)) => has(&d.update),
+                Ok(Updates::Updates(d)) => d.updates.iter().any(has),
+                Ok(Updates::UpdatesCombined(d)) => d.updates.iter().any(has),
+                _ => false,
+            };
+            if found {
+                notified.store(true, Ordering::Release);
+            }
+        })));
+    let mut qr_authorized = false;
+    let qr_result = async {
+        let token = h
+            .rpc(
+                second,
+                AuthExportLoginToken::new(API_ID, API_HASH.as_bytes().to_vec(), vec![]),
+            )
+            .await?;
+        let AuthLoginToken::AuthLoginToken(token) = token else {
+            return Err("initial QR token missing".to_string());
+        };
+        h.rpc(first, AuthAcceptLoginToken::new(token.token.clone()))
+            .await?;
+        println!("auth.acceptLoginToken: accepted");
+        let start = std::time::Instant::now();
+        while !update.load(Ordering::Acquire) {
+            h.tick().await;
+            if start.elapsed().as_secs() >= 60 {
+                return Err("updateLoginToken timeout".into());
+            }
+        }
+        println!("second Instance: updateLoginToken received");
+        let mut result = h
+            .rpc(
+                second,
+                AuthExportLoginToken::new(API_ID, API_HASH.as_bytes().to_vec(), vec![]),
+            )
+            .await?;
+        while let AuthLoginToken::AuthLoginTokenMigrateTo(data) = result {
+            println!("QR migrate: DC={}", data.dc_id);
+            h.senders[second].instance().set_main_dc_id(data.dc_id);
+            result = h
+                .rpc(second, AuthImportLoginToken::new(data.token.clone()))
+                .await?;
+        }
+        if !matches!(result, AuthLoginToken::AuthLoginTokenSuccess(_)) {
+            return Err("QR authorization incomplete".into());
+        }
+        qr_authorized = true;
+        println!("QR users.getUsers: id={}", h.self_id(second).await?);
+        Ok(())
+    }
+    .await;
+    let qr_logout = if qr_authorized {
+        let result = h.rpc(second, AuthLogOut::new()).await;
+        if result.is_ok() {
+            println!("QR auth.logOut: ok");
+        }
+        result.map(|_| ())
+    } else {
+        Ok(())
+    };
+    qr_result.and(qr_logout)
 }

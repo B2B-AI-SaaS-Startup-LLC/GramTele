@@ -178,3 +178,8 @@ Rust 1.95.0 (закреплённый Nix), 2026-11-13: fmt exit 0, clippy works
 Два ignored относятся к прежнему живому DH, третий — ручной synthetic exporter,
 который был выполнен отдельно для обратного native-чтения. Полный вывод:
 [docs/verification/workspace.log](docs/verification/workspace.log).
+
+Повторная диагностика PHONE_CODE_INVALID: см. ../tg-mtproto/docs/login-diagnostics.
+Восемь разрешённых попыток исчерпаны, причина не установлена. test_dc_tdata
+теперь включает общий QR-путь после того же входа по коду; живой restore по-прежнему
+не выполнен, так как signIn вернул PHONE_CODE_INVALID до записи временной tdata.

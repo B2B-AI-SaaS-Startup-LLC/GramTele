@@ -571,3 +571,17 @@ QR/успешные self/logout и живое восстановление tdata
 QDataStream теперь реализован один раз в tg_base::qt_stream; прежний путь
 mtproto::details::qt_stream переэкспортирует его. nullable_bytes/nullable_utf16
 дают raw null/empty/UTF16 для слоя хранения; старые convenience методы сохранены.
+
+## Уточнение проверки тестового входа
+
+Восемь попыток с разными синтетическими номерами исчерпаны; FLOOD_WAIT не было.
+Все диагностические sendCode вернули Sms(length=5), next_type=Call, timeout=90.
+DC1/11111, DC2/22222 и DC3/33333 получили PHONE_CODE_INVALID. Нативная сериализация
+запросов и initConnection проверена отдельно, включая codeSettings flags=0.
+Проверены actual test endpoints, стабильность keyId/sessionId между sendCode и
+signIn, подготовительные getConfig/getNearestDc/getCountriesList и маршрут через
+смену главного DC. Причина не установлена; это не доказательство изменения правил
+тестового сервера. [Полные дампы и таблица проверок](docs/login-diagnostics/README.md).
+QR и restore tdata новым процессом живьём остаются недостигнутыми. Оба примера
+используют общий login_qr; test_dc_tdata проверяет QR и затем tdata после одного
+входа по коду, без расходования дополнительной попытки входа.
