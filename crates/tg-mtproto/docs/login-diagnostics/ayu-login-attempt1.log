@@ -1,0 +1,3 @@
+test phone: 9996624442; initial DC=2
+auth.sendCode: length=5; main DC=2
+test login stopped: Error { code: 400, kind: "PHONE_CODE_INVALID", description: "" }

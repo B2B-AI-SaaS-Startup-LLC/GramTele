@@ -1,0 +1,7 @@
+Rust 1.95.0
+Command: nix develop --command bash -euc 'cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace'
+cargo fmt --check: exit 0
+cargo clippy --workspace --all-targets -- -D warnings: exit 0
+cargo test --workspace: exit 0; 616 passed; 0 failed; 3 ignored
+New tests: ayu-core 20; native login TL 1.
+Live login: 8/8 attempts consumed; PHONE_CODE_INVALID; QR/tdata restore not reached; no FLOOD_WAIT.

@@ -2,7 +2,7 @@
 #[path = "../../tg-mtproto/examples/support/test_login.rs"]
 mod test_login;
 use std::{fs, path::Path};
-use test_login::{login_code, Harness};
+use test_login::{login_code, login_qr, Harness};
 use tg_core::{
     main::main_account::Authorization,
     storage::{
@@ -31,6 +31,10 @@ async fn child(root: &Path) -> Result<(), String> {
 async fn parent() -> Result<(), String> {
     let mut h = Harness::new();
     let index = login_code(&mut h).await?;
+    if let Err(error) = login_qr(&mut h, index).await {
+        let _ = h.rpc(index, tg_scheme::AuthLogOut::new()).await;
+        return Err(error);
+    }
     let id = h.self_id(index).await?;
     let root = std::env::temp_dir().join(format!("ayugram-live-test-tdata-{}", std::process::id()));
     if root.exists() {

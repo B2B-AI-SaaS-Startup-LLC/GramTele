@@ -24,7 +24,13 @@ impl Harness {
         }
     }
     pub fn add(&mut self) -> usize {
-        self.add_fields(Fields::new(Environment::Test))
+        let mut fields = Fields::new(Environment::Test);
+        fields.main_dc_id = if std::env::var_os("AYUGRAM_LOGIN_ORIGINAL_PREFLIGHT").is_some() {
+            0
+        } else {
+            phone_dc()
+        };
+        self.add_fields(fields)
     }
     pub fn add_fields(&mut self, mut fields: Fields) -> usize {
         assert!(fields.config.is_test_mode());
@@ -59,6 +65,22 @@ impl Harness {
     where
         R::Response: Send + 'static,
     {
+        if std::env::var_os("AYUGRAM_LOGIN_BUDGET_DIR").is_some() {
+            let words = tg_tl::serialize(&request);
+            println!(
+                "request to main DC {}:\n{}",
+                self.senders[index].instance().main_dc_id(),
+                tg_mtproto::details::mtproto_dump_to_text::dump_to_text_type_from(&words, 0).0
+            );
+            println!(
+                "request hex: {}",
+                words
+                    .iter()
+                    .flat_map(|w| w.to_le_bytes())
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            );
+        }
         let (tx, rx) = std::sync::mpsc::channel();
         let fail = tx.clone();
         let id = self.senders[index]
@@ -75,6 +97,18 @@ impl Harness {
         loop {
             self.tick().await;
             if let Ok(result) = rx.try_recv() {
+                if std::env::var_os("AYUGRAM_LOGIN_BUDGET_DIR").is_some() {
+                    let instance = self.senders[index].instance();
+                    println!(
+                        "response route: DC={}, identity={:?}",
+                        instance.main_dc_id(),
+                        instance.session(instance.main_dc_id()).map(|s| (
+                            s.identity(),
+                            s.endpoint(),
+                            s.init_prefix()
+                        ))
+                    );
+                }
                 return result;
             }
             if start.elapsed().as_secs() >= 90 {
@@ -97,20 +131,93 @@ pub async fn login_code(h: &mut Harness) -> Result<usize, String> {
     let first = h.add();
     let mut bytes = [0; 4];
     SystemRandom.fill(&mut bytes);
-    let phone = format!("999662{:04}", u32::from_le_bytes(bytes) % 10000);
-    println!("test phone: {phone}; initial DC=2");
-    h.senders[first].instance().set_user_phone(phone.clone());
+    let digit = phone_dc() as u8 + b'0';
+    let phone = format!(
+        "99966{}{:04}",
+        phone_dc(),
+        u32::from_le_bytes(bytes) % 10000
+    );
+    if let Some(root) = std::env::var_os("AYUGRAM_LOGIN_BUDGET_DIR") {
+        let root = std::path::PathBuf::from(root);
+        std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+        let mut recorded = false;
+        for i in 1..=8 {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(root.join(format!("attempt-{i}")))
+            {
+                Ok(mut file) => {
+                    use std::io::Write;
+                    writeln!(file, "{phone}").map_err(|e| e.to_string())?;
+                    println!("login attempt {i}/8");
+                    recorded = true;
+                    break;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+        if !recorded {
+            return Err("eight-attempt login budget exhausted".into());
+        }
+    }
+    println!(
+        "test phone: {phone}; initial DC={}",
+        h.senders[first].instance().main_dc_id()
+    );
+    if std::env::var_os("AYUGRAM_LOGIN_ORIGINAL_PREFLIGHT").is_some() {
+        let config = h.rpc(first, HelpGetConfig::new()).await?;
+        println!(
+            "intro getConfig: received {} bytes",
+            tg_tl::serialize(&config).len() * 4
+        );
+        let nearest = h.rpc(first, HelpGetNearestDc::new()).await?;
+        println!(
+            "intro nearest: {}",
+            tg_mtproto::details::mtproto_dump_to_text::dump_to_text_type_from(
+                &tg_tl::serialize(&nearest),
+                0
+            )
+            .0
+        );
+        let NearestDc::NearestDc(nearest) = nearest;
+        h.senders[first]
+            .instance()
+            .suggest_main_dc_id(nearest.nearest_dc);
+        let countries = h.rpc(first, HelpGetCountriesList::new(vec![], 0)).await?;
+        println!(
+            "intro countries: received {} bytes",
+            tg_tl::serialize(&countries).len() * 4
+        );
+    }
+    let send_phone = if std::env::var_os("AYUGRAM_LOGIN_ORIGINAL_PREFLIGHT").is_some() {
+        format!("+{phone}")
+    } else {
+        phone.clone()
+    };
+    h.senders[first]
+        .instance()
+        .set_user_phone(send_phone.clone());
     let sent = h
         .rpc(
             first,
             AuthSendCode::new(
-                phone.as_bytes().to_vec(),
+                send_phone.as_bytes().to_vec(),
                 API_ID,
                 API_HASH.as_bytes().to_vec(),
                 mtp_code_settings(Default::default(), None, None, None),
             ),
         )
         .await?;
+    println!(
+        "auth.sendCode reply:\n{}",
+        tg_mtproto::details::mtproto_dump_to_text::dump_to_text_type_from(
+            &tg_tl::serialize(&sent),
+            0
+        )
+        .0
+    );
     let authorization = match sent {
         AuthSentCode::AuthSentCodeSuccess(data) => data.authorization.clone(),
         AuthSentCode::AuthSentCode(data) => {
@@ -134,7 +241,7 @@ pub async fn login_code(h: &mut Harness) -> Result<usize, String> {
                         AuthSignIn::F_PHONE_CODE,
                         phone.as_bytes().to_vec(),
                         data.phone_code_hash.clone(),
-                        Some(vec![b'2'; length as usize]),
+                        Some(vec![digit; length as usize]),
                         None,
                     ),
                 )
@@ -182,4 +289,93 @@ pub async fn login_code(h: &mut Harness) -> Result<usize, String> {
         }
     }
     Ok(first)
+}
+
+fn phone_dc() -> i32 {
+    let dc = std::env::var("AYUGRAM_TEST_PHONE_DC")
+        .ok()
+        .map(|v| v.parse::<i32>().expect("test DC must be 1..3"))
+        .unwrap_or(2);
+    assert!((1..=3).contains(&dc));
+    dc
+}
+
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+
+pub async fn login_qr(h: &mut Harness, first: usize) -> Result<(), String> {
+    let second = h.add();
+    let update = Arc::new(AtomicBool::new(false));
+    let notified = update.clone();
+    h.senders[second]
+        .instance()
+        .set_updates_handler(Some(Box::new(move |response| {
+            use tg_tl::Deserialize;
+            let mut reader = tg_tl::Reader::new(&response.reply);
+            let has = |u: &Update| matches!(u, Update::UpdateLoginToken(_));
+            let found = match Updates::read(&mut reader) {
+                Ok(Updates::UpdateShort(d)) => has(&d.update),
+                Ok(Updates::Updates(d)) => d.updates.iter().any(has),
+                Ok(Updates::UpdatesCombined(d)) => d.updates.iter().any(has),
+                _ => false,
+            };
+            if found {
+                notified.store(true, Ordering::Release);
+            }
+        })));
+    let mut qr_authorized = false;
+    let qr_result = async {
+        let token = h
+            .rpc(
+                second,
+                AuthExportLoginToken::new(API_ID, API_HASH.as_bytes().to_vec(), vec![]),
+            )
+            .await?;
+        let AuthLoginToken::AuthLoginToken(token) = token else {
+            return Err("initial QR token missing".to_string());
+        };
+        h.rpc(first, AuthAcceptLoginToken::new(token.token.clone()))
+            .await?;
+        println!("auth.acceptLoginToken: accepted");
+        let start = std::time::Instant::now();
+        while !update.load(Ordering::Acquire) {
+            h.tick().await;
+            if start.elapsed().as_secs() >= 60 {
+                return Err("updateLoginToken timeout".into());
+            }
+        }
+        println!("second Instance: updateLoginToken received");
+        let mut result = h
+            .rpc(
+                second,
+                AuthExportLoginToken::new(API_ID, API_HASH.as_bytes().to_vec(), vec![]),
+            )
+            .await?;
+        while let AuthLoginToken::AuthLoginTokenMigrateTo(data) = result {
+            println!("QR migrate: DC={}", data.dc_id);
+            h.senders[second].instance().set_main_dc_id(data.dc_id);
+            result = h
+                .rpc(second, AuthImportLoginToken::new(data.token.clone()))
+                .await?;
+        }
+        if !matches!(result, AuthLoginToken::AuthLoginTokenSuccess(_)) {
+            return Err("QR authorization incomplete".into());
+        }
+        qr_authorized = true;
+        println!("QR users.getUsers: id={}", h.self_id(second).await?);
+        Ok(())
+    }
+    .await;
+    let qr_logout = if qr_authorized {
+        let result = h.rpc(second, AuthLogOut::new()).await;
+        if result.is_ok() {
+            println!("QR auth.logOut: ok");
+        }
+        result.map(|_| ())
+    } else {
+        Ok(())
+    };
+    qr_result.and(qr_logout)
 }
