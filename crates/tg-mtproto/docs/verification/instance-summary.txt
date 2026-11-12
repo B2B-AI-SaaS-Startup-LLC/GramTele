@@ -1,0 +1,8 @@
+Rust 1.95.0, 2026-11-12
+cargo fmt --check: exit 0
+cargo clippy --workspace --all-targets -- -D warnings: exit 0
+cargo test --workspace: exit 0; 583 passed, 0 failed, 2 ignored
+tg-mtproto: 123 ordinary tests, 2 ignored; new ordinary tests: 34
+instance-map: 367 rows; 366 definitions with test, including 11 default; 1 undefined prototype reading-only; native overlap: decryptSimpleConfig
+Native simple config rebuild and execution: exit 0
+No new dependencies; main Cargo.lock commit preserved without local modifications.

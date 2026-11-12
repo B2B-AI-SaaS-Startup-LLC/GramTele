@@ -804,6 +804,9 @@ fn configuration_expiry_cdn_and_protocol_layer_use_virtual_time() {
         changes.try_recv(),
         Ok(EnvironmentChange::CdnConfig)
     ));
+    assert!(instance
+        .take_notices()
+        .contains(&crate::mtp_instance::Notice::WriteSettings));
     let id = instance.send_protocol_message(2, &tg_scheme::DestroyAuthKey::new());
     assert!(!instance.session_environment().has_callback(id));
     instance.with_config(|config| assert!(config.is_test_mode()));

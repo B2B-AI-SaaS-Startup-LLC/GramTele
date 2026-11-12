@@ -230,8 +230,8 @@ OAEP, все варианты ASN.1/Qt IDNA и JSON numerics на экстрем
 | `details/mtproto_serialized_request.h` | done | `details/mtproto_serialized_request.rs` — Header/body/padding/ack; RequestStore + handle identity; tests. |
 | `details/mtproto_tcp_socket.cpp` | partial | `details/mtproto_tcp_socket.rs` — Tokio, SOCKS5 и Basic CONNECT; native Qt samples. Digest/NTLM/Negotiate отсутствуют; возврат этап 2 с выбором backend. |
 | `details/mtproto_tcp_socket.h` | partial | `details/mtproto_tcp_socket.rs` — Tokio, SOCKS5 и Basic CONNECT; native Qt samples. Digest/NTLM/Negotiate отсутствуют; возврат этап 2 с выбором backend. |
-| `details/mtproto_tls_socket.cpp` | partial | `details/mtproto_tls_socket.rs` — Native hello/X25519, duplex record stream; timeout→sync owner integration требует сессии; этап 2. |
-| `details/mtproto_tls_socket.h` | partial | `details/mtproto_tls_socket.rs` — Native hello/X25519, duplex record stream; timeout→sync owner integration требует сессии; этап 2. |
+| `details/mtproto_tls_socket.cpp` | partial | `details/mtproto_tls_socket.rs` — Native hello/X25519, duplex record stream; timeout→SyncTimeRequest проверен виртуально; полная Qt signal/error matrix — только чтение, этап 2. |
+| `details/mtproto_tls_socket.h` | partial | `details/mtproto_tls_socket.rs` — Native hello/X25519, duplex record stream; timeout→SyncTimeRequest проверен виртуально; полная Qt signal/error matrix — только чтение, этап 2. |
 | `details/mtproto_web_proxy_socket.cpp` | partial | `details/mtproto_web_proxy_socket.rs` — Поток/window/Drop через WebTransport; настоящий browser Transport/webview — этап 5. |
 | `details/mtproto_web_proxy_socket.h` | partial | `details/mtproto_web_proxy_socket.rs` — Поток/window/Drop через WebTransport; настоящий browser Transport/webview — этап 5. |
 | `mtproto_auth_key.cpp` | done | `mtproto_auth_key.rs` — Native keyId, v1/v2 оба направления, AES-IGE; CTR в native TCP. |

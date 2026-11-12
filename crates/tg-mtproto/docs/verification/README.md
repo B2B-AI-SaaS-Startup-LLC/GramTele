@@ -35,3 +35,15 @@ Native reference и свои tests отделены в [README крейта](../
 Нативные fixtures совпали без обнаруженных расхождений в описанном наборе;
 это не доказательство паритета OAEP, всех ASN.1/IDNA/error paths и всех Qt
 floating-point текстовых представлений. Internet proxy/fake TLS не запускались.
+
+## Instance — окончательная проверка
+
+Предыдущие разделы и checkpoint/live-first/runtime логи — история прежних
+шагов, а не итог текущего кода. Итог: [instance-checks.log](instance-checks.log),
+[instance-summary.txt](instance-summary.txt), [instance-live.log](instance-live.log).
+Rust 1.95.0: fmt exit 0, clippy -D warnings exit 0, workspace tests exit 0,
+583 passed / 0 failed / 2 ignored. 34 новых обычных теста; в tg-mtproto 123.
+Окончательный живой пример проверяет фактический dctransport перед выводом,
+поэтому HTTP подтверждён независимо от подписи в консоли. Только тестовые DC.
+Нативный decryptSimpleConfig собран и исполнен отдельно; остальные QObject
+интеграции не выдаются за проверку исходного C++ запуском.

@@ -1760,6 +1760,7 @@ impl Instance {
                         let mut s = instance.state.lock().unwrap();
                         s.cdn_request = 0;
                         s.config.dc_options.set_cdn_config(result.c_cdn_config());
+                        s.notice(Notice::WriteSettings);
                         drop(s);
                         instance.sync_environment();
                         instance.broadcast(EnvironmentChange::CdnConfig);
