@@ -844,10 +844,10 @@ SHA256 в исходном loader нет: хеш проверяет стенд, 
 
 ## Итог этапа 2
 
-Полный критерий PLAN.md ещё НЕ выполнен; выполнена разрешённая часть без входа:
+Полный критерий PLAN.md ещё НЕ выполнен. Попытка входа 2026-11-12 остановилась на ответе тестового сервера; нижний слой tdata начат отдельно (см. следующий раздел).
 
-- Консольный вход по коду на тестовом DC — не выполнен, запрещён текущим заданием.
-- Консольный вход по QR на тестовом DC — не выполнен, запрещён текущим заданием.
+- Консольный вход по коду на тестовом DC — предпринят: 9996620387, sendCode length=5; signIn с 22222 вернул PHONE_CODE_INVALID. После отказа код/номер не подбирались. Лог: crates/tg-core/docs/verification/login-test-dc.log.
+- Консольный вход по QR на тестовом DC — пример реализован и компилируется, но живой путь не достигнут: первый Instance не авторизован по коду.
 - help.getConfig через каждый транспорт — выполнен для TCP и HTTP,
   подтверждён instance-live.log с assert фактического транспорта.
 - help.getConfig через каждый прокси — не выполнен: нет живых прокси;
@@ -856,7 +856,7 @@ SHA256 в исходном loader нет: хеш проверяет стенд, 
 
 Всего файлов этапа 2: 74; done 49, replaced 1, partial 18, todo 6.
 Все partial/todo ниже перечислены пофайлово. Номер после стрелки — этап возврата.
-Вход по коду/QR и этап 3 не начинались.
+Вход по коду предпринят без успеха; QR не достигнут. Начат только нижний слой этапа 3, без пользовательской tdata, настроек и чатов.
 
 - `SourceFiles/mtproto/connection_abstract.cpp` (partial) → 5 → factory браузерного WEB transport/webview.
 - `SourceFiles/mtproto/connection_abstract.h` (partial) → 5 → factory браузерного WEB transport/webview.
@@ -882,3 +882,143 @@ SHA256 в исходном loader нет: хеш проверяет стенд, 
 - `SourceFiles/mtproto/web_proxy/web_proxy_transport.h` (todo) → 5 → webview и браузерный transport.
 - `SourceFiles/mtproto/web_proxy/web_proxy_webview.cpp` (todo) → 5 → оконный слой и backend webview.
 - `SourceFiles/mtproto/web_proxy/web_proxy_webview.h` (todo) → 5 → оконный слой и backend webview.
+
+
+## Тестовый вход и этап 3: ключи и каркас tdata (2026-11-12/13)
+
+Ветка port/tdata от main 7ef2c60; промежуточные коммиты 0d57c13 и 24b2658,
+слияние 726725b. Старые worktree mtproto-instance и влитая ветка удалены.
+Чужие README/secret-o3-api.jpg из main сохранены; tg-cache и строки lib_storage
+не менялись. Cargo.lock обновлён: новая внешняя зависимость md-5 0.11.0 и
+внутренние зависимости tg-core на tg-base/tg-mtproto/tg-rpl/tg-runtime.
+Test/example зависимости tg-scheme/tg-tl/tokio уже были в workspace.
+
+**Живой вход:** test_dc_login.rs сверяет последовательность с intro_phone,
+intro_code, intro_qr и intro_signup. Только Environment::Test, api_id 17349 и
+публичный test api_hash из config.h; генерируемый 999662YYYY, код 2 длиной из
+sendCode, SignUp Port Test при необходимости. QR: export, accept первым Instance,
+updateLoginToken, новый export и повторяемый migrate/import вторым. После успеха
+self через users.getUsers и logout. Код/QR UI не переводился.
+
+Первый запуск выявил ошибку примера: пустой device_model ->
+CONNECTION_DEVICE_MODEL_EMPTY. Заданы Desktop/Linux. Следующий запуск:
+
+    test phone: 9996620387; initial DC=2
+    auth.sendCode: length=5; main DC=2
+    test login stopped: Error { code: 400, kind: "PHONE_CODE_INVALID", description: "" }
+
+Отправлялся 22222. Другие коды/номера после отказа не подбирались, FLOOD_WAIT
+не обходился. Успешного входа нет: users.getUsers/QR/logout не достигнуты,
+ни один аккаунт не авторизован. Production DC не использовались.
+В ранних запусках ещё был включён автоматический ConfigLoader help.getConfig —
+лишний запрос относительно ограничения задачи. Ошибка явно учтена:
+Runtime.set_automatic_config(false) отключает его в обоих новых примерах;
+исполняемый тест до любого I/O проверяет подавление и повторное включение.
+Повторного живого запуска после PHONE_CODE_INVALID не было. Других исправлений
+протокольного автомата по предположению о причине отказа не делалось.
+Логи login-*.log в crates/tg-core/docs/verification.
+
+**Форматы:** TDF$ + LE version/length + оригинальный MD5 trailer; выбор s либо
+legacy 0/1; временный файл/rename и очередь с coalescing/sync/stop/Drop.
+Криптография: modern SHA512(salt+pass+salt) + PBKDF2-HMAC-SHA512 (256 байт,
+1/100000), legacy PBKDF2-HMAC-SHA1 (4/4000), SHA1[0..16] и AES-IGE с local v1
+schedule false. Общий Qt_5_1 код вынесен из tg-mtproto в tg_base::qt_stream;
+старый путь переэкспортирует его. BE integers, nullable QByteArray и raw UTF16
+(включая непарные units) реализованы один раз. Старые convenience bytes/string
+сохраняют прежнее сведение null к empty; новые nullable_* сохраняют различие.
+
+storage_domain хранит local key/passcode salt, encrypted local key, список и
+активный индекс; modern/legacy запуск, смена/проверка код-пароля. Уведомления
+синхронны через tg-rpl::EventStream/Producer/Lifetime, Domain живёт на главном
+потоке. Main list-write идёт через on_main_local с weak-корнем; готовые бинарные
+WriteEntry передаются ObjectOnThread. Таймер map — base::Timer с ManualClock.
+main_account хранит wide/narrow authorization и связывает её с настоящим Instance
+через Fields/getKeysForWrite/addKeysForDestroy. Это форматный срез, а не готовые
+Main::Session/Core/UI модели. Account читает известные map records без открытия
+settings/chat/cache файлов и сохраняет payload непрозрачно. Auth dbiUser/dbiKey
+и 0x4b, encrypted MTP Config envelope готовы; остальные ReadSetting отложены.
+
+**Карта:** crates/tg-core/docs/tdata-map.md, 133 строки: 128 определений с телом,
+5 default. 125 связаны с исполняемыми тестами; 8 Windows-only строк заменены
+готовым base и проверены чтением — LockFile/Restart Manager в Linux не запустить.
+31 строка дополнительно затронута native execution, категории пересекаются.
+Для main_*/storage_account вне текущего объёма пофункционально перечислены
+196 определений следующей задачи; нет готовых заглушек Cache/Session/settings.
+
+**Нативный эталон в обе стороны:** отдельный CMake вне клона оригинала,
+Qt 6.11.2/OpenSSL 3.6.5/GCC 15.3. Исполнены исходные utility functions,
+writeNow/writeHeader/open/path с QSaveFile safe path, MD5 из core/utils.cpp,
+AuthKey/SHA/AES, Main authorization serialize/parser, Storage::Domain key/info
+writer/parser. Четыре каталога: empty/test-passcode × 1/3 аккаунта, 8 аккаунтных
+записей всего, по два текущих DC-ключа и одному destroy-key. Оригинальный writer
+и reader совпали; Rust получил те же поля и все 256 байт каждого ключа;
+Rust при том же entropy пишет те же имена и байты файлов; оригинальный reader
+прочитал Rust-каталоги с теми же ключами/индексами/активным аккаунтом. Exit 0
+во всех четырёх вариантах обоих направлений. Fixtures/manifest в tests/fixtures.
+Дополнительный оригинальный образец подтверждает null/empty QString/QByteArray,
+unpaired UTF16, RGBA, оба PBKDF и narrow -> wide authorization reserialization.
+
+Границы native доказательства: owner/account-start — фасад, не Qt Main::Session;
+пустая карта строится обвязкой через оригинальный FileWriteDescriptor, не целым
+Storage::Account::writeMap с моделями пользователя. Полный Storage::Account/Cache,
+клиент, исходная асинхронная очередь и OS-fallback C++ не выполнялись. Safe path
+исполнялся; fallback обвязки аварийно завершает capture, если туда попасть.
+Rust очереди, ошибки I/O и suffix selection проверяются отдельно. Не выдаём
+эту обвязку за запуск оригинального приложения или его UI/bootstrap.
+
+**Свои тесты:** повреждение каждого байта TDF и все усечения, неверный пароль,
+размеры/границы AES и SHA1, s vs 0/1 и порядок mtime без sleep, coalescing,
+async writer/sync/stop/Drop и I/O failure, legacy key migration и narrow IDs,
+map records, key handoff Instance, Config envelope, код-пароль/rpl lifetime,
+виртуальный map timer и main queue. Новых обычных тестов 12: 11 в tg-core,
+1 в tg-mtproto. Плюс ручной ignored synthetic exporter выполнен отдельно.
+Переиспользованы base FileLock и его тесты двумя процессами; Win запуск недоступен.
+
+**Сквозной живой процесс:** test_dc_tdata.rs компилируется. Он должен войти только
+на тестовом DC, записать временную tdata вместе с test Config, запустить себя новым
+процессом, выполнить users.getUsers без sendCode/signIn и logout, затем удалить
+каталог. Живьём не выполнен: обязательный первый вход отвергнут сервером,
+повторных попыток после PHONE_CODE_INVALID не делалось. Успешный restore не
+подменён native fixtures. Настоящая tdata пользователя не открывалась/не копировалась.
+
+**Проверки:** Rust 1.95.0, точная команда PORTING.md:
+- cargo fmt --check — exit 0;
+- cargo clippy --workspace --all-targets -- -D warnings — exit 0;
+- cargo test --workspace — exit 0, 595 passed, 0 failed, 3 ignored.
+Два ignored — прежний live DH; третий — ручной exporter для native read Rust.
+Полный вывод: crates/tg-core/docs/verification/workspace.log, summary.txt,
+native-create.log/native-read-rust.log и rustc.txt.
+
+**Особенности оригинала/отличия:** повреждённый modern info после назначения
+local key вызывает Failed, затем startFromScratch пытается generateLocalKey
+при уже существующем ключе. Контракт сохранён как panic и проверен своим тестом;
+C++ аварийный путь подтверждён только чтением. При наличии s оригинал не пытается
+читать 0/1, даже если s повреждён; сохранено. Уже прочитанные auth поля остаются
+после усечения, как в void-parser C++; Rust дополнительно возвращает Result.
+Отрицательный count отвергается вместо опасного reserve(count). QDataStream
+Status заменён явным Option/Result с ранним возвратом. Имена временных файлов
+отличаются от Qt; финальные байты совпадают. OS failure matrix и Windows не
+выдаются за native parity. Внутренний Cache cleanup, канонизация старых map
+records и весь UI/self/settings lifetime отложены и не выполняются молча.
+Явных AyuGram/ayu маркеров в перечисленных файлах не найдено; kPremiumMaxAccounts
+перенесён из фактического форка как 200, без замены значением upstream.
+
+Реестр этой задачи: 13 строк — 6 done (utilities/serialize/domain), 3 replaced
+(storage FileLock через base), 4 partial (storage_account.cpp/.h и main_account.cpp,
+main_domain.cpp). Основные main headers остаются todo этапа 4.
+Отложено по файлам:
+- storage_account.cpp/.h → следующий срез этапа 3 → settings/self/drafts/stickers,
+  применение и канонизация непустой карты, остальные ReadSetting/readOldMtpData,
+  Cache/cleanup через согласованный интерфейс; lib_storage не трогать.
+- main_account.cpp → этап 4 (storage hooks — продолжение 3) → Main::Session/Core/UI,
+  настоящие владельцы и подписки на сохранение.
+- main_domain.cpp → этап 4 (storage hooks — продолжение 3) → UI/активация/окна,
+  lifecycle аккаунтов; форматный список и его weak-запись уже готовы.
+- storage_file_lock_win.cpp → Windows проверка → LockFile/Restart Manager.
+- code/QR и живой restore → продолжение проверки этапов 2/3 → разрешённый
+  тестовый сервер должен принять предписанный код; не обходить отказ.
+
+Вопросов, требующих решения для этого среза, нет. Полный критерий этапа 2 не
+закрыт из-за отказа входа/непроверенных прокси; критерий этапа 3 также не закрыт:
+живого взаимного подключения по tdata ещё нет. Дальнейшие settings/chat/cache
+задачи не начинались. Пуш не выполнялся, stash base-crypto сохранён.
