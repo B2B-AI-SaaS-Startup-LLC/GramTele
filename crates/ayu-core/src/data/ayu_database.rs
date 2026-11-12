@@ -218,6 +218,13 @@ impl AyuDatabase {
     }
     fn select<T: Record>(&self, tail: &str, p: &[&dyn ToSql]) -> rusqlite::Result<Vec<T>> {
         let c = self.connection.lock().unwrap();
+        Self::select_on::<T>(&c, tail, p)
+    }
+    fn select_on<T: Record>(
+        c: &Connection,
+        tail: &str,
+        p: &[&dyn ToSql],
+    ) -> rusqlite::Result<Vec<T>> {
         let cols = T::COLUMNS
             .iter()
             .zip(T::KINDS)
@@ -340,11 +347,23 @@ impl AyuDatabase {
         self.select("WHERE dialogId=?", &[&id]).unwrap_or_default()
     }
     pub fn get_excluded_by_dialog_id(&self, id: i64) -> Vec<RegexFilter> {
-        self.select(
-            "WHERE id IN (SELECT COALESCE(CAST(filterId AS BLOB), x'') FROM RegexFilterGlobalExclusion WHERE dialogId=?)",
-            &[&id],
-        )
-        .unwrap_or_default()
+        // Original: storage.select(filterId), then get_all(IN(ids)), under one mutex.
+        // Materialization converts SQLite values to vector<char> and preserves
+        // the original binding limit and the two separate statement snapshots.
+        let c = self.connection.lock().unwrap();
+        let result = (|| -> rusqlite::Result<Vec<RegexFilter>> {
+            let ids: Vec<Vec<u8>> = {
+                let mut q=c.prepare("SELECT COALESCE(CAST(filterId AS BLOB),x'') FROM RegexFilterGlobalExclusion WHERE dialogId=?")?;
+                let rows = q
+                    .query_map([id], |r| r.get(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                rows
+            };
+            let placeholders = vec!["?"; ids.len()].join(",");
+            let parameters = ids.iter().map(|id| id as &dyn ToSql).collect::<Vec<_>>();
+            Self::select_on(&c, &format!("WHERE id IN ({placeholders})"), &parameters)
+        })();
+        result.unwrap_or_default()
     }
     pub fn get_count(&self) -> i32 {
         self.connection
