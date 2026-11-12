@@ -1,0 +1,51 @@
+login attempt 5/8
+test phone: 9996621689; initial DC=2
+request to main DC 2:
+{ help_getNearestDc }
+request hex: 2630b31f
+response route: DC=2, identity=Some(((5123649528739980249, 18033222308918871037), Some(Endpoint { id: 2, flags: 16, ip: "149.154.167.40", port: 443, secret: [] }), [-627372787, 229, -1043505495, 2, 17349, 1936016391, 1886352491, 1852394501, 30837, 841889541, 14638, 7234818, 1701082120, 1869900659, 112, 7234818, -1715350371, 481674261, 1, -1059185703, 1601860617, 1936090735, 29797, 736157604, 0, 0]))
+intro nearest: { nearestDc
+  country: "BR" [STRING],
+  this_dc: 2 [INT],
+  nearest_dc: 1 [INT],
+}
+request to main DC 2:
+{ help_getCountriesList
+  lang_code: "" [STRING],
+  hash: 0 [INT],
+}
+request hex: a88757730000000000000000
+response route: DC=2, identity=Some(((5123649528739980249, 18033222308918871037), Some(Endpoint { id: 2, flags: 16, ip: "149.154.167.40", port: 443, secret: [] }), [-627372787, 229, -1043505495, 2, 17349, 1936016391, 1886352491, 1852394501, 30837, 841889541, 14638, 7234818, 1701082120, 1869900659, 112, 7234818, -1715350371, 481674261, 1, -1059185703, 1601860617, 1936090735, 29797, 736157604, 0, 0]))
+intro countries: received 14872 bytes
+request to main DC 2:
+{ auth_sendCode
+  phone_number: "+9996621689" [STRING],
+  api_id: 17349 [INT],
+  api_hash: "344583e45741c457fe1862106095a5eb" [STRING],
+  settings: { codeSettings
+    flags: 0 [INT],
+  },
+}
+request hex: 4f2477a60b2b39393936363231363839c5430000203334343538336534353734316334353766653138363231303630393561356562000000783d25ad00000000
+response route: DC=2, identity=Some(((5123649528739980249, 18033222308918871037), Some(Endpoint { id: 2, flags: 16, ip: "149.154.167.40", port: 443, secret: [] }), [-627372787, 229, -1043505495, 2, 17349, 1936016391, 1886352491, 1852394501, 30837, 841889541, 14638, 7234818, 1701082120, 1869900659, 112, 7234818, -1715350371, 481674261, 1, -1059185703, 1601860617, 1936090735, 29797, 736157604, 0, 0]))
+auth.sendCode reply:
+{ auth_sentCode
+  flags: 6 [INT],
+  type: { auth_sentCodeTypeSms
+    length: 5 [INT],
+  },
+  phone_code_hash: "e9d23c8f7e06d968b1" [STRING],
+  next_type: { auth_codeTypeCall },
+  timeout: 90 [INT],
+}
+auth.sendCode: length=5; main DC=2
+request to main DC 2:
+{ auth_signIn
+  flags: 1 [INT],
+  phone_number: "9996621689" [STRING],
+  phone_code_hash: "e9d23c8f7e06d968b1" [STRING],
+  phone_code: "22222" [STRING],
+}
+request hex: 51a9528d010000000a393939363632313638390012653964323363386637653036643936386231000532323232320000
+response route: DC=2, identity=Some(((5123649528739980249, 18033222308918871037), Some(Endpoint { id: 2, flags: 16, ip: "149.154.167.40", port: 443, secret: [] }), [-627372787, 229, -1043505495, 2, 17349, 1936016391, 1886352491, 1852394501, 30837, 841889541, 14638, 7234818, 1701082120, 1869900659, 112, 7234818, -1715350371, 481674261, 1, -1059185703, 1601860617, 1936090735, 29797, 736157604, 0, 0]))
+test login stopped: Error { code: 400, kind: "PHONE_CODE_INVALID", description: "" }

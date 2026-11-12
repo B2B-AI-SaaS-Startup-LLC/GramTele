@@ -548,6 +548,8 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
             self.connection = self.candidates.remove(&id);
             self.data.snapshot.lock().unwrap().transport =
                 self.connection.as_ref().unwrap().tag.clone();
+            self.data.snapshot.lock().unwrap().endpoint =
+                Some(self.connection.as_ref().unwrap().spec.endpoint.clone());
             self.close_candidates();
             self.check_auth_key();
         }
@@ -593,6 +595,8 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
             self.connection = self.candidates.remove(&id);
             self.data.snapshot.lock().unwrap().transport =
                 self.connection.as_ref().unwrap().tag.clone();
+            self.data.snapshot.lock().unwrap().endpoint =
+                Some(self.connection.as_ref().unwrap().spec.endpoint.clone());
             self.close_candidates();
             self.check_auth_key();
         }
@@ -716,6 +720,7 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
                 break;
             }
         }
+        self.data.snapshot.lock().unwrap().identity = (self.session_id, self.key_id);
         self.counter = 0;
         self.session_started = false;
         self.ack.clear();
@@ -1068,7 +1073,7 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         } else {
             self.data.environment.system_version()
         };
-        tg_tl::serialize(&tg_scheme::InvokeWithLayer::new(
+        let prefix = tg_tl::serialize(&tg_scheme::InvokeWithLayer::new(
             229,
             tg_scheme::InitConnection::new(
                 tg_tl::Flags::from_raw(2 | u64::from(proxy.is_some())),
@@ -1083,7 +1088,9 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
                 Some(self.prepare_init_params()),
                 SerializedRequest::default(),
             ),
-        ))
+        ));
+        self.data.snapshot.lock().unwrap().init_prefix = prefix.clone();
+        prefix
     }
     fn wrap_invoke_after(&self, handle: RequestHandle, init: bool) -> Message {
         let queues = self.data.queues.lock().unwrap();

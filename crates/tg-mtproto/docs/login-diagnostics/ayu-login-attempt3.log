@@ -1,0 +1,34 @@
+login attempt 3/8
+test phone: 9996613177; initial DC=1
+request to main DC 1:
+{ auth_sendCode
+  phone_number: "9996613177" [STRING],
+  api_id: 17349 [INT],
+  api_hash: "344583e45741c457fe1862106095a5eb" [STRING],
+  settings: { codeSettings
+    flags: 0 [INT],
+  },
+}
+request hex: 4f2477a60a3939393636313331373700c5430000203334343538336534353734316334353766653138363231303630393561356562000000783d25ad00000000
+response route: DC=1, identity=Some(((41147092480439217, 8722267890536350928), Some(Endpoint { id: 1, flags: 16, ip: "149.154.175.10", port: 443, secret: [] }), [-627372787, 229, -1043505495, 2, 17349, 1936016391, 1886352491, 1852394501, 30837, 841889541, 14638, 7234818, 1701082120, 1869900659, 112, 7234818, -1715350371, 481674261, 1, -1059185703, 1601860617, 1936090735, 29797, 736157604, 0, 0]))
+auth.sendCode reply:
+{ auth_sentCode
+  flags: 6 [INT],
+  type: { auth_sentCodeTypeSms
+    length: 5 [INT],
+  },
+  phone_code_hash: "54e027f8639a76c46e" [STRING],
+  next_type: { auth_codeTypeCall },
+  timeout: 90 [INT],
+}
+auth.sendCode: length=5; main DC=1
+request to main DC 1:
+{ auth_signIn
+  flags: 1 [INT],
+  phone_number: "9996613177" [STRING],
+  phone_code_hash: "54e027f8639a76c46e" [STRING],
+  phone_code: "11111" [STRING],
+}
+request hex: 51a9528d010000000a393939363631333137370012353465303237663836333961373663343665000531313131310000
+response route: DC=1, identity=Some(((41147092480439217, 8722267890536350928), Some(Endpoint { id: 1, flags: 16, ip: "149.154.175.10", port: 443, secret: [] }), [-627372787, 229, -1043505495, 2, 17349, 1936016391, 1886352491, 1852394501, 30837, 841889541, 14638, 7234818, 1701082120, 1869900659, 112, 7234818, -1715350371, 481674261, 1, -1059185703, 1601860617, 1936090735, 29797, 736157604, 0, 0]))
+test login stopped: Error { code: 400, kind: "PHONE_CODE_INVALID", description: "" }

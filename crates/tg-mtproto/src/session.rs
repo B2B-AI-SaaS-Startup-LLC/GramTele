@@ -109,6 +109,9 @@ pub struct RequestQueues {
 }
 #[derive(Default)]
 pub(crate) struct SessionSnapshot {
+    pub identity: (u64, u64),
+    pub endpoint: Option<crate::mtproto_dc_options::Endpoint>,
+    pub init_prefix: Vec<i32>,
     pub state: i32,
     pub retry_at: Option<i64>,
     pub transport: String,
@@ -403,6 +406,16 @@ pub struct SessionHandle {
 impl SessionHandle {
     pub fn data(&self) -> &Arc<SessionData> {
         &self.data
+    }
+    /// Public MTProto session/key identifiers, never key bytes.
+    pub fn identity(&self) -> (u64, u64) {
+        self.data.snapshot.lock().unwrap().identity
+    }
+    pub fn endpoint(&self) -> Option<crate::mtproto_dc_options::Endpoint> {
+        self.data.snapshot.lock().unwrap().endpoint.clone()
+    }
+    pub fn init_prefix(&self) -> Vec<i32> {
+        self.data.snapshot.lock().unwrap().init_prefix.clone()
     }
     pub fn get_state_at(&self, now: i64) -> i32 {
         let snapshot = self.data.snapshot.lock().unwrap();
