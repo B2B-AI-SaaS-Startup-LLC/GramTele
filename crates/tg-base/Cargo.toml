@@ -14,6 +14,7 @@ getrandom = { version = "0.4", features = ["sys_rng"] }
 hmac = "0.13"
 pbkdf2 = "0.13"
 regex = "1.13"
+serde_json = "1"
 sha1 = "0.11"
 sha2 = "0.11"
 tg-rpl = { path = "../tg-rpl" }
