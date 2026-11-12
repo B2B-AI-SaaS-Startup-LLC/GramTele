@@ -4473,10 +4473,10 @@ lib_storage/storage/storage_encrypted_file.h,72,tg-cache,3,todo
 lib_storage/storage/storage_encryption.cpp,109,tg-cache,3,todo
 lib_storage/storage/storage_encryption.h,58,tg-cache,3,todo
 lib_storage/storage/storage_pch.h,28,tg-cache,3,todo
-lib_tl/tl/tl_basic_types.cpp,15,tg-tl,1,todo
-lib_tl/tl/tl_basic_types.h,686,tg-tl,1,todo
-lib_tl/tl/tl_boxed.h,67,tg-tl,1,todo
-lib_tl/tl/tl_type_owner.h,100,tg-tl,1,todo
+lib_tl/tl/tl_basic_types.cpp,15,tg-tl,1,done
+lib_tl/tl/tl_basic_types.h,686,tg-tl,1,done
+lib_tl/tl/tl_boxed.h,67,tg-tl,1,done
+lib_tl/tl/tl_type_owner.h,100,tg-tl,1,done
 lib_translate/translate_provider.h,86,tg-platform,8,todo
 lib_translate/translate_provider_mac_swift_bridge.h,24,tg-platform,8,todo
 lib_ui/ayu/ayu_ui_settings.cpp,58,tg-ui,5,todo

@@ -1,0 +1,21 @@
+[package]
+name = "tg-scheme"
+version = "0.0.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+description = "Generated Telegram API and MTProto schema types (layer from api.tl)."
+build = "build.rs"
+
+[features]
+# Derives Debug on every generated type (off by default to keep build time down).
+debug = []
+
+[dependencies]
+tg-tl = { path = "../tg-tl" }
+
+[build-dependencies]
+tg-tl-gen = { path = "../tg-tl-gen" }
+
+[dev-dependencies]
+tg-tl-gen = { path = "../tg-tl-gen" }
