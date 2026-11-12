@@ -1,0 +1,296 @@
+[
+  {
+    "path": "SourceFiles/mtproto/core_types.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/core_types.rs",
+    "note": "Типы/ID/сдвиги; TL codec из tg-tl, явный LE; native TL и TCP/DH."
+  },
+  {
+    "path": "SourceFiles/mtproto/type_utils.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/type_utils.rs",
+    "note": "Bool языка и те же thin helpers; используется schema/response."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_pch.h",
+    "status": "replaced",
+    "module": "crates/tg-mtproto/src/lib.rs",
+    "note": "PCH заменён Rust imports и модульной компиляцией."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_auth_key.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/mtproto_auth_key.rs",
+    "note": "Native keyId, v1/v2 оба направления, AES-IGE; CTR в native TCP."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_auth_key.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/mtproto_auth_key.rs",
+    "note": "Native keyId, v1/v2 оба направления, AES-IGE; CTR в native TCP."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_dh_utils.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/mtproto_dh_utils.rs",
+    "note": "BigNum, все g/prime/ga bounds, fixed 256-byte secret power; свои tests и live DH."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_dh_utils.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/mtproto_dh_utils.rs",
+    "note": "BigNum, все g/prime/ga bounds, fixed 256-byte secret power; свои tests и live DH."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_rsa_public_key.h",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_rsa_public_key.rs",
+    "note": "Native fingerprint/raw; strict malformed PEM/zero components, OAEP ещё только чтение; возврат этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_rsa_public_key.cpp",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_rsa_public_key.rs",
+    "note": "Native fingerprint/raw; strict malformed PEM/zero components, OAEP ещё только чтение; возврат этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_response.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/mtproto_response.rs",
+    "note": "RPC parsing через готовый qthelp_regex, local/flood/temporary; tests."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_response.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/mtproto_response.rs",
+    "note": "RPC parsing через готовый qthelp_regex, local/flood/temporary; tests."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_dc_key_creator.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_dc_key_creator.rs",
+    "note": "Автоматы одиночного/постоянного+временного обмена, RSA_PAD, retry, sync time; memory server и отказные tests, TCP live."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_dc_key_creator.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_dc_key_creator.rs",
+    "note": "Автоматы одиночного/постоянного+временного обмена, RSA_PAD, retry, sync time; memory server и отказные tests, TCP live."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_dc_key_binder.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_dc_key_binder.rs",
+    "note": "Bind inner, v1 шифрование и результаты; независимая расшифровка в test."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_dc_key_binder.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_dc_key_binder.rs",
+    "note": "Bind inner, v1 шифрование и результаты; независимая расшифровка в test."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_bound_key_creator.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_bound_key_creator.rs",
+    "note": "Owner exchange/binder, stop/restart, error classification; проверка по чтению и bind tests."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_bound_key_creator.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_bound_key_creator.rs",
+    "note": "Owner exchange/binder, stop/restart, error classification; проверка по чтению и bind tests."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_dcenter.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_dcenter.rs",
+    "note": "Mutex/Arc вместо Qt lock; exclusion, identity, destroy; многопоточный test."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_dcenter.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_dcenter.rs",
+    "note": "Mutex/Arc вместо Qt lock; exclusion, identity, destroy; многопоточный test."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_serialized_request.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_serialized_request.rs",
+    "note": "Header/body/padding/ack; RequestStore + handle identity; tests."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_serialized_request.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_serialized_request.rs",
+    "note": "Header/body/padding/ack; RequestStore + handle identity; tests."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_received_ids_manager.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_received_ids_manager.rs",
+    "note": "BTreeMap, duplicate/too-old, explicit shrink; tests."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_received_ids_manager.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_received_ids_manager.rs",
+    "note": "BTreeMap, duplicate/too-old, explicit shrink; tests."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_dump_to_text.h",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_dump_to_text.rs",
+    "note": "Примитивы/vector/gzip/layers работают; все Qt double edge cases ещё не сверены. Возврат этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_dump_to_text.cpp",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_dump_to_text.rs",
+    "note": "Примитивы/vector/gzip/layers работают; все Qt double edge cases ещё не сверены. Возврат этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_abstract_socket.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_abstract_socket.rs",
+    "note": "AsyncRead/AsyncWrite, SocketEvent и выбор типа вместо QObject."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_abstract_socket.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_abstract_socket.rs",
+    "note": "AsyncRead/AsyncWrite, SocketEvent и выбор типа вместо QObject."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_tcp_socket.h",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_tcp_socket.rs",
+    "note": "Tokio, SOCKS5 и Basic CONNECT; native Qt samples. Digest/NTLM/Negotiate отсутствуют; возврат этап 2 с выбором backend."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_tcp_socket.cpp",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_tcp_socket.rs",
+    "note": "Tokio, SOCKS5 и Basic CONNECT; native Qt samples. Digest/NTLM/Negotiate отсутствуют; возврат этап 2 с выбором backend."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_tls_socket.h",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_tls_socket.rs",
+    "note": "Native hello и duplex record stream; production X25519 provider и timeout→sync owner integration требуют решения; этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_tls_socket.cpp",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_tls_socket.rs",
+    "note": "Native hello и duplex record stream; production X25519 provider и timeout→sync owner integration требуют решения; этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_web_proxy_socket.h",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_web_proxy_socket.rs",
+    "note": "Поток/window/Drop через WebTransport; настоящий browser Transport/webview — этап 5."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_web_proxy_socket.cpp",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/details/mtproto_web_proxy_socket.rs",
+    "note": "Поток/window/Drop через WebTransport; настоящий browser Transport/webview — этап 5."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_domain_resolver.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_domain_resolver.rs",
+    "note": "DoH request specs/reqwest, JSON, stagger/cache/cancel owner; virtual tests. Живой DoH не запускался."
+  },
+  {
+    "path": "SourceFiles/mtproto/details/mtproto_domain_resolver.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/details/mtproto_domain_resolver.rs",
+    "note": "DoH request specs/reqwest, JSON, stagger/cache/cancel owner; virtual tests. Живой DoH не запускался."
+  },
+  {
+    "path": "SourceFiles/mtproto/connection_abstract.h",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/connection_abstract.rs",
+    "note": "Clock/Exchange/events/packet helpers/runtime adapter; единая factory для всех backend зависит от partial TLS/WEB/HTTP; этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/connection_abstract.cpp",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/connection_abstract.rs",
+    "note": "Clock/Exchange/events/packet helpers/runtime adapter; единая factory для всех backend зависит от partial TLS/WEB/HTTP; этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/connection_tcp.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/connection_tcp.rs",
+    "note": "0/1/D, prefix/CTR, stream/probe/queues; native fixtures, duplex и live test DC."
+  },
+  {
+    "path": "SourceFiles/mtproto/connection_tcp.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/connection_tcp.rs",
+    "note": "0/1/D, prefix/CTR, stream/probe/queues; native fixtures, duplex и live test DC."
+  },
+  {
+    "path": "SourceFiles/mtproto/connection_http.h",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/connection_http.rs",
+    "note": "Reqwest POST, pending/cancel/probe/http_wait; status с двойным пробелом не принимается; этап 2, нужен upstream/согласованный patch."
+  },
+  {
+    "path": "SourceFiles/mtproto/connection_http.cpp",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/connection_http.rs",
+    "note": "Reqwest POST, pending/cancel/probe/http_wait; status с двойным пробелом не принимается; этап 2, нужен upstream/согласованный patch."
+  },
+  {
+    "path": "SourceFiles/mtproto/connection_resolving.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/connection_resolving.rs",
+    "note": "IP fallback/deadline/domain changes как actions владельцу; virtual tests, Qt forwarding заменён owner contract."
+  },
+  {
+    "path": "SourceFiles/mtproto/connection_resolving.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/connection_resolving.rs",
+    "note": "IP fallback/deadline/domain changes как actions владельцу; virtual tests, Qt forwarding заменён owner contract."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_proxy_data.h",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/mtproto_proxy_data.rs",
+    "note": "Links/secrets/WEB capability/proxy records; native null/empty и tests. Все Qt IDNA cases и raw UTF-16 требуют этапа 3."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_proxy_data.cpp",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/mtproto_proxy_data.rs",
+    "note": "Links/secrets/WEB capability/proxy records; native null/empty и tests. Все Qt IDNA cases и raw UTF-16 требуют этапа 3."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_dc_options.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/mtproto_dc_options.rs",
+    "note": "Встроенные DC/RSA, lookup/change/CDN/persistence/debug file; native defaults и tests, сложные CDN cases — только чтение."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_dc_options.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/mtproto_dc_options.rs",
+    "note": "Встроенные DC/RSA, lookup/change/CDN/persistence/debug file; native defaults и tests, сложные CDN cases — только чтение."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_config.h",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/mtproto_config.rs",
+    "note": "Native все поля/default/custom/UTF16/null, apply/legacy tails; непарные UTF-16 требуют raw QString на этапе 3."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_config.cpp",
+    "status": "partial",
+    "module": "crates/tg-mtproto/src/mtproto_config.rs",
+    "note": "Native все поля/default/custom/UTF16/null, apply/legacy tails; непарные UTF-16 требуют raw QString на этапе 3."
+  }
+]

@@ -1129,6 +1129,25 @@ impl Drop for FileToWrite {
     }
 }
 
+/// Gzip stream used by MTProto `gzip_packed`, with a caller-provided expansion
+/// budget. Uses the same already-selected miniz_oxide backend as ZIP entries.
+pub fn inflate_gzip(input: &[u8], limit: usize) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut decoder = flate2::read::GzDecoder::new(input);
+    let mut output = Vec::new();
+    decoder
+        .by_ref()
+        .take((limit as u64).saturating_add(1))
+        .read_to_end(&mut output)?;
+    if output.len() > limit {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "gzip expansion limit exceeded",
+        ));
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
