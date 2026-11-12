@@ -1,0 +1,26 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/mtproto-transport' is dirty
+   Compiling tg-base v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-transport/crates/tg-base)
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-transport/crates/tg-mtproto)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.92s
+     Running tests/live_test_dc.rs (target/debug/deps/live_test_dc-20c2b3d039222263)
+
+running 2 tests
+HTTP raw probe: Ok(Ok("first 256 bytes: \"HTTP/1.0  200 OK\\r\\nConnection: close\\r\\nContent-Type: application/octet-stream\\r\\nPragma: no-cache\\r\\nCache-control: no-store\\r\\nContent-Length: 224\\r\\n\\r\\n\\0\\0\\0\\0\\0\\0\\0\\0\\u{1}H\\u{19},R��jP\\0\\0\\0c$\\u{16}\\u{5}\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\u{4}�\\u{10}e�C@�\\u{1d}G�&\\u{b}\\u{1a}{e\\u{8}\\u{1a}��5�\\u{c}l�\\0\\0\\0\\u{15}ĵ\\u{1c}\\u{3}\\0\\0\\0\\u{3}&� ߘX�\\u{2}�K�m\\u{10}��!k�l\\u{2}+��,\\u{5b6}!1��Э^iGH\"; hex=[48, 54, 54, 50, 2f, 31, 2e, 30, 20, 20, 32, 30, 30, 20, 4f, 4b, 0d, 0a, 43, 6f, 6e, 6e, 65, 63, 74, 69, 6f, 6e, 3a, 20, 63, 6c, 6f, 73, 65, 0d, 0a, 43, 6f, 6e, 74, 65, 6e, 74, 2d, 54, 79, 70, 65, 3a, 20, 61, 70, 70, 6c, 69, 63, 61, 74, 69, 6f, 6e, 2f, 6f, 63, 74, 65, 74, 2d, 73, 74, 72, 65, 61, 6d, 0d, 0a, 50, 72, 61, 67, 6d, 61, 3a, 20, 6e, 6f, 2d, 63, 61, 63, 68, 65, 0d, 0a, 43, 61, 63, 68, 65, 2d, 63, 6f, 6e, 74, 72, 6f, 6c, 3a, 20, 6e, 6f, 2d, 73, 74, 6f, 72, 65, 0d, 0a, 43, 6f, 6e, 74, 65, 6e, 74, 2d, 4c, 65, 6e, 67, 74, 68, 3a, 20, 32, 32, 34, 0d, 0a, 0d, 0a, 00, 00, 00, 00, 00, 00, 00, 00, 01, 48, 19, 2c, 52, c3, f5, 6a, 50, 00, 00, 00, 63, 24, 16, 05, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 04, b8, 10, 65, 93, 43, 40, ee, 1d, 47, c8, 26, 0b, 1a, 7b, 65, 08, 1a, a1, ed, 35, de, 0c, 6c, fd, 00, 00, 00, 15, c4, b5, 1c, 03, 00, 00, 00, 03, 26, 8d, 20, df, 98, 58, b2, 02, 9f, 4b, a1, 6d, 10, 92, 96, 21, 6b, e8, 6c, 02, 2b, b4, c3, 2c, d6, b6, 21, 31, b3, 84, d0, ad, 5e, 69, 47, 48]"))
+HTTP result: Ok(Err(Http(reqwest::Error { kind: Request, url: "http://149.154.167.40/api", source: hyper_util::client::legacy::Error(SendRequest, hyper::Error(Parse(Status))) })))
+
+thread 'authorization_key_test_dc_http' (2714953) panicked at crates/tg-mtproto/tests/live_test_dc.rs:80:5:
+assertion failed: matches!(result, Ok(Ok(())))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test authorization_key_test_dc_http ... FAILED
+TEST DC TCP: DH succeeded, keyId=4c0cabdf83e09833
+TCP result: Ok(Ok(()))
+test authorization_key_test_dc_tcp ... ok
+
+failures:
+
+failures:
+    authorization_key_test_dc_http
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.49s
+
+error: test failed, to rerun pass `-p tg-mtproto --test live_test_dc`

@@ -1,0 +1,261 @@
+# tg-mtproto: транспорт и создание ключей
+
+Перенос части этапа 2 ниже сессии. Создание постоянного auth key проверено на
+тестовом DC через TCP. Полный паритет всех транспортов **не достигнут**:
+HTTP упирается в разбор ответа reqwest, fake TLS требует X25519 provider,
+WEB требует браузерный Transport. Эти места имеют статус partial, не заглушки
+с успешным результатом. SessionPrivate прочитан целиком, сессия и MTP Instance
+не портировались.
+
+## Соединение и время
+
+В C++ QObject сокета и соединения живут в потоке сессии. В Rust один владелец
+держит mutable protocol state в задаче Tokio; AsyncRead + AsyncWrite — граница
+потока байтов. TcpCodec, KeyExchange, DomainResolver и ResolvingConnection
+не открывают сеть и не получают время самостоятельно. Их входы — байты,
+Random и Time/Clock. Тесты дают duplex stream и виртуальные миллисекунды;
+sleep и реальная сеть в обычных Rust tests не используются.
+
+TcpConnection/Socks/CONNECT/TlsSocket — асинхронные адаптеры к такому потоку.
+Protocol 0 — abridged, 1 — abridged с SHA256(source+secret), D — padded
+intermediate. LE задан явно, даже когда C++ использовал reinterpret_cast
+32-bit слов. Обфусцированный prefix отправляется вместе с первым frame;
+CTR уже продвинут на 64 байта. Для fake TLS надо создавать TcpConnection
+через `new_with_nonce_filter(..., |_| true)`: оригинальный TlsSocket принимает
+любой nonce; TCP и WEB фильтруют запрещённые первые байты.
+
+SocketEvent соответствует connected/disconnected/readyRead/error/syncTimeRequests;
+Event соединения — receivedData/receivedSome/connected/disconnected/error/syncTimeRequest.
+ConnectionState хранит очередь пакетов и событий. `receive_into_queue()` наполняет
+очередь, `receive()` потребляет один пакет. Result сообщает сетевую ошибку;
+владелец решает, когда отменять соединение. `dispatch_events_on_main` отправляет
+пачку через FIFO tg-runtime. Обратный вызов исполняется после возврата в очередь,
+а не синхронно внутри Qt signal. Удаление владельца/отмена future заменяет deleteLater.
+
+HTTP использует reqwest, POST `/api`, порт 80, Content-Type
+`application/x-www-form-urlencoded`, тело без двух reserved TCP words.
+Клоны HttpConnection — handles одного manager: поддерживаются несколько
+outstanding requests, pending count, need_http_wait и общая отмена watch channel.
+Для независимого соединения создаётся новый HttpConnection. reqwest::Client
+передаётся с нужной политикой proxy/redirect; live test использует no_proxy.
+`probe()` выполняет оригинальный fake req_pq и фиксирует ping/connected.
+
+Clock::now даёт monotonic_ms и synchronized unix_seconds; next_message_id
+предоставляет ID (в RuntimeClock — готовый tg_base::unixtime::mtproto_msg_id,
+включая перенастройку при сдвиге времени). update_unix_time
+получает время после проверки SHA1 server_DH_inner_data. RuntimeClock соединяет
+это с tg_runtime::now и tg_base::unixtime::update. Автомат не использует
+Tokio sleep: DNS stagger и IP timeout — next_deadline/poll(now). Сессионные
+restart/ack/ping timers будут в части 2. Существующего tg-runtime достаточно
+для clocks, main dispatch и фоновых очередей; его blocking executor не используется
+для асинхронного сетевого I/O. tg-runtime и tg-rpl не изменены.
+
+## C++ → Rust (места из session_private.cpp)
+
+| C++ | Rust |
+|---|---|
+| `BareDcId(_shiftedDcId)` | `core_types::bare_dc_id(shifted_dc_id)` |
+| `MTP_bool(true)` / `mtpIsTrue(...)` | `type_utils::mtp_bool(true)` / обычный bool |
+| `AbstractConnection::Create(... Tcp ...)` | socket adapter + `TcpConnection::new(stream, protocol, dc_id, random).await` |
+| `connectToServer(ip, port, secret, id, forFiles)` | `mtproto_tcp_socket::connect_to_host(...)`, затем Protocol::from_secret и TcpConnection |
+| `ProtocolDcDebugId(getProtocolDcId())` | `protocol_dc_debug_id(id)` |
+| `prepareNotSecurePacket(req, newId)` | `prepare_not_secure_packet(&req, msg_id, &mut random)` |
+| `prepareSecurePacket(keyId, msgKey, fullSize)` | `prepare_secure_packet(key_id, &msg_key, words)` |
+| `_connection->received().front()` / pop | `connection.state.received.pop_front()` |
+| `connect(... receivedData ...)` | drain Event::ReceivedData или `receive().await` |
+| `connected` / `pingTime` | `probe(...).await`, state.connected/state.ping_time |
+| `sentEncryptedWithKeyId` | `state.sent_encrypted_with_key_id` |
+| `_encryptionKey->partForMsgKey(false)` | `key.part_for_msg_key(false)` |
+| `prepareAES(msgKey, ..., false)` | `key.prepare_aes(&msg_key, false)` |
+| `aesIgeDecrypt(...)` | derive key/iv, затем `aes_ige_decrypt_raw(&mut bytes, &key, &iv)` |
+| `SerializedRequest::Serialize(MTPPing(...))` | `SerializedRequest::serialize(&Ping::new(id), now_ms)` |
+| `request.setMsgId / setSeqNo / addPadding` | `set_msg_id / set_seq_no / add_padding(false, random)` |
+| maps, держащие shared SerializedRequest | один RequestStore; копируются RequestHandle, мутации общие через store.get_mut |
+| `request->after` | `Option<RequestHandle>`, владелец сессии держит зависимые requests живыми |
+| `registerMsgId(msgId, needAck)` | `ReceivedIdsManager::register_msg_id`; shrink вызывается отдельно |
+| `BoundKeyCreator::start / bind / restartBinder` | те же действия через owner, DcKeyCreator::receive выдаёт CreationStep |
+| `temporaryKey->setExpiresAt(now + 86400 + 30)` | до публикации Arc: `Arc::get_mut(&mut result.temporary_key).unwrap().set_expires_at(...)` |
+| `prepareBindRequest(key, sessionId)` | `prepare_bind_request(key, session_id, msg_id, now_ms, random)` |
+| `handleBindResponse(response)` | DcKeyBindState::Success/Failed/DefinitelyDestroyed |
+| `DumpToText(from, end)` | `mtproto_dump_to_text::dump_to_text(&words)` |
+| `dcOptions.lookup(dc, type, throughProxy)` | `lookup`, адрес × протокол в том же порядке |
+
+RequestStore не копирует RequestData при копировании handle. Сессионные карты
+в части 2 должны владеть идентификаторами центрального хранилища и удалять
+request только после обработки зависимостей/ответов; самостоятельное клонирование
+буфера не заменяет C++ shared_ptr.
+
+## Криптография и сериализация
+
+BigNum/SHA1/SHA256/HMAC берутся из готового tg_base::openssl_help.
+DH/RSA числа — BE; keyId/fingerprint/nonce/msgId и слова TL — LE;
+QDataStream Qt_5_1 в tdata — BE числа и byte length + UTF-16 BE строки.
+QString null и empty различаются: string_nulls сохраняет это при чтении/записи.
+Непарные UTF-16 суррогаты отклоняются: String их не представляет. Для полного
+паритета повреждённой/произвольной tdata нужен отдельный raw QString тип на этапе 3.
+
+Секретный показатель всегда имеет исходную фиксированную длину 256 байтов;
+BigNum использует constant-time Montgomery pow для нечётного модуля, не другой
+big integer crate. AES256-IGE — ige/aes; CTR — Ctr128BE (как OpenSSL ctr128).
+Есть v2 send x=0/receive x=8 и v1 для local/bind. Random передаётся явно;
+системный provider пользуется уже готовым tg-base random. Приватный auth key
+очищается zeroize при drop.
+
+RSA поддерживает PKCS#1 и SPKI PEM, публичную raw операцию с 256-byte блоком
+и OAEP SHA1/MGF1 с пустым label. Raw padding не добавляется. Некорректные/нулевые
+компоненты отвергаются строже OpenSSL; OAEP пока проверен чтением реализации,
+не native образцом. Встроенные PEM и production/test DC адреса перенесены буквально.
+
+Для JSON использован существующий serde_json через `tg_base::json`; для gzip
+добавлен `tg_base::zlib_help::inflate_gzip`, использующий уже выбранный flate2/miniz_oxide.
+Нового JSON/zlib backend и прямых новых зависимостей этих типов нет.
+
+| Новая прямая зависимость tg-mtproto | Проверенная версия | Назначение |
+|---|---|---|
+| aes | 0.9.4 | AES256 |
+| ctr | 0.10.1 | поток CTR |
+| ige | 0.2.1 | IGE |
+| reqwest | 0.12.28 | HTTP и DoH; rustls-tls/json features |
+| tokio | 1.54.1 | I/O, futures, watch, задачи |
+| zeroize | 1.9.1 | очистка секретов; уже был в tg-base |
+| tg-base / tg-runtime / tg-scheme / tg-tl | workspace | готовые базовые примитивы и TL |
+
+Cargo.lock не коммитится; в таблице версии фактического проверенного разрешения.
+
+## Проверка и границы
+
+Эталон оригинала: AuthKey keyId, все четыре key schedules, RSA fingerprint/raw,
+AES-IGE encrypt/decrypt, DC/options config (production/test), Config с каждым непустым полем отличным
+от defaults, emoji UTF-16 и null strings, proxy record null/empty, все три
+TCP prefixes + first frames, fake TLS hello со всеми GREASE/extensions.
+Дополнительно нативные Qt SOCKS5 и HTTP CONNECT Basic образцы. Способ переснять,
+форматы и источники — [tests/reference-tools](tests/reference-tools/README.md).
+
+Свои tests: сервер с собственным RSA private key проверяет RSA_PAD, SHA256,
+IGE, DH и совпадение auth key, успешный ответ и retry. Отдельные tests проверяют
+плохие nonce/hashes/stages/DH lengths/prime/g_a, fail и retry limit. Это не
+доказательство всех теоретических ошибок криптографических backend: например,
+ошибка RSA_public_encrypt на корректном 2048-bit ключе не воспроизводилась.
+Есть duplex TCP 0/1/D, fake TLS, SOCKS/CONNECT; виртуальное время resolver/DoH,
+потоки Dcenter, bind decrypt, request padding/identity, dump primitives/vector/
+gzip/layer и CRC/budget ошибки gzip. Непустой g_b/secret power и порядок bytes
+проверены успешным обменом, а не одним roundtrip одного codec.
+
+Живой сервер: тестовый DC 2, 149.154.167.40, TCP:443 — DH success.
+HTTP:80 — отказ reqwest `Parse(Status)`. Диагностика отправила только req_pq_multi
+и получила `HTTP/1.0  200 OK` (два пробела). Сервер доступен; это несовместимость
+парсера, а не отсутствие сети. В публичных настройках reqwest нет флага для
+multiple spaces в status delimiters; [ClientBuilder](https://docs.rs/reqwest/latest/reqwest/struct.ClientBuilder.html).
+Нужен upstream/локальный patch reqwest+hyper для доступа к настройке httparse,
+либо отдельно согласованный backend/connector. Такой patch/backend не добавлялся.
+Полный вывод — [live-test-dc.log](docs/verification/live-test-dc.log).
+Аккаунт/api_id не использовались, API requests не посылались, production DC не трогались.
+
+Запуск вручную: `nix develop --command cargo test -p tg-mtproto --test live_test_dc -- --ignored --nocapture`.
+Прокси/fake TLS в интернете не проверены: только fixtures, duplex и чтение.
+OAEP, все варианты ASN.1/Qt IDNA и JSON numerics на экстремальных значениях
+не имеют native parity proof. QObject reentrancy заменена очередью событий.
+
+Различия и сохранённые особенности оригинала:
+
+- FactorizePQ для пустого/0/1 pq всё равно возвращает p=1 и q=0/1, каждый
+  padded до 4 BE bytes. Сохранено и проверено; в большом пути padding минимальный.
+- В dc_options секрет может быть принят validate_secret и записан, но затем
+  отклонён собственным reader из-за лимита 32 байта. Сохранено и проверено.
+- Dcenter при несовпадении persistent key в release_on_done оставляет флаг
+  creating установленным до release_on_fail. Поведение сохранено; вывод по чтению.
+- Core dump пропускает legacy layer1 в поиске и имеет current-layer fallback,
+  до которого обычная generated serializer map не доходит: invokeWithLayer
+  печатается как структура. Сохранено; проверены оба пути.
+- Dump gzip ограничен 32 MiB и глубиной 64; оригинальный logging decoder
+  не имеет этих лимитов; неполный gzip также отклоняется. Double formatting реализован с шестью значащими цифрами,
+  все пограничные Qt случаи ещё не сверены. Крипто/сетевые байты это не меняет.
+- Только plain/Basic HTTP CONNECT; Digest/NTLM/Negotiate дают явную ошибку.
+  Reqwest HTTP-over-SOCKS потребует отдельно согласовать socks feature и её backend.
+- Для fake TLS есть полный rule interpreter/record adapter и HelloEntropy input.
+  Нет production X25519 provider в разрешённом наборе. Варианты: согласовать
+  подходящий RustCrypto backend либо отдельный X25519 crate; самостоятельно
+  выбирать его или подменять публичную точку случайными байтами порт не стал.
+- WEB socket реализует поток и flow-control через WebTransport. Реальный
+  web_proxy/Transport + webview вне этой части и требует оконного/браузерного слоя.
+
+Решение по каждому из 49 исходных файлов и возврат к partial — ниже.
+
+| Исходный файл | Статус | Rust модуль / решение и граница |
+|---|---|---|
+| `connection_abstract.cpp` | partial | `connection_abstract.rs` — Clock/Exchange/events/packet helpers/runtime adapter; единая factory для всех backend зависит от partial TLS/WEB/HTTP; этап 2. |
+| `connection_abstract.h` | partial | `connection_abstract.rs` — Clock/Exchange/events/packet helpers/runtime adapter; единая factory для всех backend зависит от partial TLS/WEB/HTTP; этап 2. |
+| `connection_http.cpp` | partial | `connection_http.rs` — Reqwest POST, pending/cancel/probe/http_wait; status с двойным пробелом не принимается; этап 2, нужен upstream/согласованный patch. |
+| `connection_http.h` | partial | `connection_http.rs` — Reqwest POST, pending/cancel/probe/http_wait; status с двойным пробелом не принимается; этап 2, нужен upstream/согласованный patch. |
+| `connection_resolving.cpp` | done | `connection_resolving.rs` — IP fallback/deadline/domain changes как actions владельцу; virtual tests, Qt forwarding заменён owner contract. |
+| `connection_resolving.h` | done | `connection_resolving.rs` — IP fallback/deadline/domain changes как actions владельцу; virtual tests, Qt forwarding заменён owner contract. |
+| `connection_tcp.cpp` | done | `connection_tcp.rs` — 0/1/D, prefix/CTR, stream/probe/queues; native fixtures, duplex и live test DC. |
+| `connection_tcp.h` | done | `connection_tcp.rs` — 0/1/D, prefix/CTR, stream/probe/queues; native fixtures, duplex и live test DC. |
+| `core_types.h` | done | `core_types.rs` — Типы/ID/сдвиги; TL codec из tg-tl, явный LE; native TL и TCP/DH. |
+| `details/mtproto_abstract_socket.cpp` | done | `details/mtproto_abstract_socket.rs` — AsyncRead/AsyncWrite, SocketEvent и выбор типа вместо QObject. |
+| `details/mtproto_abstract_socket.h` | done | `details/mtproto_abstract_socket.rs` — AsyncRead/AsyncWrite, SocketEvent и выбор типа вместо QObject. |
+| `details/mtproto_bound_key_creator.cpp` | done | `details/mtproto_bound_key_creator.rs` — Owner exchange/binder, stop/restart, error classification; проверка по чтению и bind tests. |
+| `details/mtproto_bound_key_creator.h` | done | `details/mtproto_bound_key_creator.rs` — Owner exchange/binder, stop/restart, error classification; проверка по чтению и bind tests. |
+| `details/mtproto_dc_key_binder.cpp` | done | `details/mtproto_dc_key_binder.rs` — Bind inner, v1 шифрование и результаты; независимая расшифровка в test. |
+| `details/mtproto_dc_key_binder.h` | done | `details/mtproto_dc_key_binder.rs` — Bind inner, v1 шифрование и результаты; независимая расшифровка в test. |
+| `details/mtproto_dc_key_creator.cpp` | done | `details/mtproto_dc_key_creator.rs` — Автоматы одиночного/постоянного+временного обмена, RSA_PAD, retry, sync time; memory server и отказные tests, TCP live. |
+| `details/mtproto_dc_key_creator.h` | done | `details/mtproto_dc_key_creator.rs` — Автоматы одиночного/постоянного+временного обмена, RSA_PAD, retry, sync time; memory server и отказные tests, TCP live. |
+| `details/mtproto_dcenter.cpp` | done | `details/mtproto_dcenter.rs` — Mutex/Arc вместо Qt lock; exclusion, identity, destroy; многопоточный test. |
+| `details/mtproto_dcenter.h` | done | `details/mtproto_dcenter.rs` — Mutex/Arc вместо Qt lock; exclusion, identity, destroy; многопоточный test. |
+| `details/mtproto_domain_resolver.cpp` | done | `details/mtproto_domain_resolver.rs` — DoH request specs/reqwest, JSON, stagger/cache/cancel owner; virtual tests. Живой DoH не запускался. |
+| `details/mtproto_domain_resolver.h` | done | `details/mtproto_domain_resolver.rs` — DoH request specs/reqwest, JSON, stagger/cache/cancel owner; virtual tests. Живой DoH не запускался. |
+| `details/mtproto_dump_to_text.cpp` | partial | `details/mtproto_dump_to_text.rs` — Примитивы/vector/gzip/layers работают; все Qt double edge cases ещё не сверены. Возврат этап 2. |
+| `details/mtproto_dump_to_text.h` | partial | `details/mtproto_dump_to_text.rs` — Примитивы/vector/gzip/layers работают; все Qt double edge cases ещё не сверены. Возврат этап 2. |
+| `details/mtproto_received_ids_manager.cpp` | done | `details/mtproto_received_ids_manager.rs` — BTreeMap, duplicate/too-old, explicit shrink; tests. |
+| `details/mtproto_received_ids_manager.h` | done | `details/mtproto_received_ids_manager.rs` — BTreeMap, duplicate/too-old, explicit shrink; tests. |
+| `details/mtproto_rsa_public_key.cpp` | partial | `details/mtproto_rsa_public_key.rs` — Native fingerprint/raw; strict malformed PEM/zero components, OAEP ещё только чтение; возврат этап 2. |
+| `details/mtproto_rsa_public_key.h` | partial | `details/mtproto_rsa_public_key.rs` — Native fingerprint/raw; strict malformed PEM/zero components, OAEP ещё только чтение; возврат этап 2. |
+| `details/mtproto_serialized_request.cpp` | done | `details/mtproto_serialized_request.rs` — Header/body/padding/ack; RequestStore + handle identity; tests. |
+| `details/mtproto_serialized_request.h` | done | `details/mtproto_serialized_request.rs` — Header/body/padding/ack; RequestStore + handle identity; tests. |
+| `details/mtproto_tcp_socket.cpp` | partial | `details/mtproto_tcp_socket.rs` — Tokio, SOCKS5 и Basic CONNECT; native Qt samples. Digest/NTLM/Negotiate отсутствуют; возврат этап 2 с выбором backend. |
+| `details/mtproto_tcp_socket.h` | partial | `details/mtproto_tcp_socket.rs` — Tokio, SOCKS5 и Basic CONNECT; native Qt samples. Digest/NTLM/Negotiate отсутствуют; возврат этап 2 с выбором backend. |
+| `details/mtproto_tls_socket.cpp` | partial | `details/mtproto_tls_socket.rs` — Native hello и duplex record stream; production X25519 provider и timeout→sync owner integration требуют решения; этап 2. |
+| `details/mtproto_tls_socket.h` | partial | `details/mtproto_tls_socket.rs` — Native hello и duplex record stream; production X25519 provider и timeout→sync owner integration требуют решения; этап 2. |
+| `details/mtproto_web_proxy_socket.cpp` | partial | `details/mtproto_web_proxy_socket.rs` — Поток/window/Drop через WebTransport; настоящий browser Transport/webview — этап 5. |
+| `details/mtproto_web_proxy_socket.h` | partial | `details/mtproto_web_proxy_socket.rs` — Поток/window/Drop через WebTransport; настоящий browser Transport/webview — этап 5. |
+| `mtproto_auth_key.cpp` | done | `mtproto_auth_key.rs` — Native keyId, v1/v2 оба направления, AES-IGE; CTR в native TCP. |
+| `mtproto_auth_key.h` | done | `mtproto_auth_key.rs` — Native keyId, v1/v2 оба направления, AES-IGE; CTR в native TCP. |
+| `mtproto_config.cpp` | partial | `mtproto_config.rs` — Native все поля/default/custom/UTF16/null, apply/legacy tails; непарные UTF-16 требуют raw QString на этапе 3. |
+| `mtproto_config.h` | partial | `mtproto_config.rs` — Native все поля/default/custom/UTF16/null, apply/legacy tails; непарные UTF-16 требуют raw QString на этапе 3. |
+| `mtproto_dc_options.cpp` | done | `mtproto_dc_options.rs` — Встроенные DC/RSA, lookup/change/CDN/persistence/debug file; native defaults и tests, сложные CDN cases — только чтение. |
+| `mtproto_dc_options.h` | done | `mtproto_dc_options.rs` — Встроенные DC/RSA, lookup/change/CDN/persistence/debug file; native defaults и tests, сложные CDN cases — только чтение. |
+| `mtproto_dh_utils.cpp` | done | `mtproto_dh_utils.rs` — BigNum, все g/prime/ga bounds, fixed 256-byte secret power; свои tests и live DH. |
+| `mtproto_dh_utils.h` | done | `mtproto_dh_utils.rs` — BigNum, все g/prime/ga bounds, fixed 256-byte secret power; свои tests и live DH. |
+| `mtproto_pch.h` | replaced | `lib.rs` — PCH заменён Rust imports и модульной компиляцией. |
+| `mtproto_proxy_data.cpp` | partial | `mtproto_proxy_data.rs` — Links/secrets/WEB capability/proxy records; native null/empty и tests. Все Qt IDNA cases и raw UTF-16 требуют этапа 3. |
+| `mtproto_proxy_data.h` | partial | `mtproto_proxy_data.rs` — Links/secrets/WEB capability/proxy records; native null/empty и tests. Все Qt IDNA cases и raw UTF-16 требуют этапа 3. |
+| `mtproto_response.cpp` | done | `mtproto_response.rs` — RPC parsing через готовый qthelp_regex, local/flood/temporary; tests. |
+| `mtproto_response.h` | done | `mtproto_response.rs` — RPC parsing через готовый qthelp_regex, local/flood/temporary; tests. |
+| `type_utils.h` | done | `type_utils.rs` — Bool языка и те же thin helpers; используется schema/response. |
+
+## Отложено
+
+| Файл | Возврат | Нужно |
+|---|---|---|
+| connection_abstract.* | 2 | Общая factory после решений по HTTP/TLS/WEB; не обещает подключить любой backend сейчас. |
+| connection_http.* | 2 | Принять malformed status test DC через разрешённый reqwest; договориться о socks support и прокси-клиенте. |
+| details/mtproto_tcp_socket.* | 2 | Согласовать и проверить Digest/NTLM/Negotiate, если они нужны вместо Basic. |
+| details/mtproto_tls_socket.* | 2 | Production X25519 provider; связать deadline owner с SyncTimeRequest. |
+| details/mtproto_web_proxy_socket.* | 5 | web_proxy/Transport и webview, браузерная сессия/IPC. |
+| details/mtproto_rsa_public_key.* | 2 | Native OAEP vectors и malformed PEM/ASN.1 compatibility. |
+| details/mtproto_dump_to_text.* | 2 | Эталон Qt double formatting на границах. |
+| mtproto_proxy_data.*, mtproto_config.* | 3 | Raw UTF-16 QString, полный IDNA native matrix; значения String с непарным суррогатом сейчас отвергаются. |
+| session*, mtp_instance*, facade*, sender*, config_loader*, special_config_request*, dedicated_file_loader*, proxy_check* | 2, часть 2 | Это не начато; использовать описанные packet/event/key interfaces. |
+
+Проверенное только чтением явно отмечено выше: часть lifecycle wrappers и ошибок,
+экстремальные ASN.1/IDNA/JSON случаи, некоторые CDN/конфигурационные ветви. Не все
+49 файлов имеют статус done. Поэтому эта часть этапа 2 целиком не объявляется готовой.
+
+Поиск `AyuGram|ayu` (также без учёта регистра) во всём каталоге mtproto
+не дал совпадений. Отдельных помеченных патчей в этих файлах не найдено.
+Присутствующий в исходной точке WEB bridge (host/path/link secret/capability)
+перенесён в своей переносимой части, а не исключён из-за отсутствия маркера.
+
+Негативные счётчики и некорректные UTF-16 поля отвергаются раньше; состояние
+объекта после неудачного чтения повреждённых данных может отличаться от C++.
+Успешные valid-data native сравнения не доказывают равенства всех error paths.

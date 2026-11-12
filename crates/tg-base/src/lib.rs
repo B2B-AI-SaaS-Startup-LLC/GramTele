@@ -46,3 +46,7 @@ pub mod timer_rpl;
 pub mod unixtime;
 pub mod weak_ptr;
 pub mod zlib_help;
+
+/// The JSON implementation already selected for QJson replacements. Shared by
+/// low-level users such as MTProto DoH without choosing another JSON backend.
+pub use serde_json as json;
