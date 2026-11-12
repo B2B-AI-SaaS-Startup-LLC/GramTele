@@ -290,10 +290,10 @@ base-runtime/codegen не изменялись. Cargo.lock не добавлял
 | Портированные тесты lib_rpl | Да | Все 28 секций оригинала и собственные tests/doctests проходят в workspace. |
 | Портированные тесты lib_base | Да, для перенесённой части | Все 14 исходных секций + tests переносимых модулей; tg-base 231 проверка, 0 ошибок. Графические/платформенные файлы ниже остаются partial/todo. |
 | TL: независимые образцы | Да, для набора покрытых форм | 37 reference_bytes tests, boundaries, flags/flags2, вложенные constructors, bytes/vector, Ayu hooks. |
-| TL: каждый тип против эталонного C++ исполнения | **Да, на конечном наборе образцов** | Оригинальные Python generators + lib_tl собраны отдельно; 1697 constructors + 823 methods × 6 режимов = 15 120 образцов, плюс 3 образца встроенного vector. Rust write/read/rewrite совпали побайтно. Recipe не зависит от tg-tl-gen; fixtures и воспроизводимый CMake в tg-scheme/tests. |
+| TL: каждый тип против эталонного C++ исполнения | **Да, на конечном наборе образцов** | Оригинальные Python generators + lib_tl собраны отдельно; 1697 constructors + 823 methods × 6 режимов = 15 120 образцов, плюс 3 образца встроенного vector. Rust write/read/rewrite совпали побайтно. Recipe не зависит от tg-tl-gen; commit 9f6ead6, 2521 определение с builtin vector; fixtures и воспроизводимый CMake в tg-scheme/tests. |
 | tg-runtime | Переносимая часть да; есть partial | 56 tests и workspace checks; остаются reactive bridges и lifetime потока, см. список. |
 | tg-codegen common/style/lang/emoji | Переносимая обработка и Rust-выдача да; графика отложена | Все настоящие входы разобраны, вся выдача компилируется; native эталоны таблиц/значений совпали, 33 теста. Image backend/sprites — этап 5. |
-| Обязательные проверки на едином Rust | Да | Rust 1.95.0 закреплён для nix-shell/nix develop/CI; все три команды exit 0, 457 тестов. |
+| Обязательные проверки на едином Rust | Да | Rust 1.95.0 закреплён для nix-shell/nix develop/CI; последний полный прогон после native TL и MTProto: все три команды exit 0, 515 тестов, 2 live ignore. |
 
 **Критерий готовности этапа 1 выполнен:** портированные тесты lib_rpl/lib_base
 проходят; каждое определение TL проверено исполнением оригинального C++ writer
@@ -478,7 +478,7 @@ base-runtime/codegen не изменялись. Cargo.lock не добавлял
 - `lib_crl/crl/crl_object_on_thread.h` → этап **4** → Согласовать lifetime фонового потока: в Rust завершается после drop объекта, C++ оставляет его навсегда; runtime tests.
 - `lib_crl/crl/crl_on_main.h` → этап **5** → Обёртка callback subscription on_main_update_requests в rpl::producer и связь с оконным loop.
 
-## Native TL reference: закрытие критерия этапа 1
+## Native TL reference: закрытие критерия этапа 1 (9f6ead6)
 
 Оригинальная схема слоя 229 сгенерирована неизменёнными generate_tl.py и
 codegen_scheme.py, скомпилирована вместе с lib_tl вне клона в
@@ -498,3 +498,60 @@ checked-in JSON и два типизированных builder. Native writer н
 границы проверки: `crates/tg-scheme/tests/reference-tools/README.md`.
 Удалены codegen worktree и полностью влитая port/tg-codegen; stash
 `base-crypto before integrating main` сохранён.
+
+## Этап 2, часть 1: транспорт MTProto (492c058, merge 951e585)
+
+Учёт восстановлен после слияния: по 49 файлам из таблицы
+`crates/tg-mtproto/README.md` в ledger отмечено **30 done, 18 partial, 1 replaced**.
+Пофайловые решения и границы — в README и `docs/files.json`. PCH заменён Rust
+imports. Остальные файлы MTProto этой задачей не портировались.
+
+**Эталон оригинала:** отдельными CMake вне клона собраны lib_tl/generated scheme,
+AuthKey/RSA/DC/config и стенды TCP/fake TLS. Совпали keyId, v1/v2 AES schedules
+в обоих направлениях, raw RSA/fingerprint, AES-IGE, встроенные DC/options config,
+все поля Config с разными значениями/UTF-16/null, proxy records, TCP prefixes и
+первые frames 0/1/D, ClientHello/GREASE/extensions/HMAC. Native Qt SOCKS5/Basic
+CONNECT сняты на локальном сервере. Полного native proof OAEP, ASN.1, IDNA и
+Qt double error/boundary cases нет. Capture scripts и SHA-256 manifest сохранены.
+
+**Своими тестами:** сервер со своим RSA ключом расшифровывает RSA_PAD и завершает
+DH, проверяет одинаковый auth key и retry. Отдельные tests проверяют nonce/hash/
+stage/length/prime/g_a/fail/retry limit; не все ошибки криптобэкендов достижимы.
+Duplex TCP 0/1/D, fake TLS, SOCKS5/CONNECT; виртуальные stagger/cache/IP deadlines;
+Dcenter threads; bind decrypt; request identity/padding; DumpCore primitives/vector/
+gzip/layers. Переносимые lifecycle wrappers и некоторые CDN/ASN.1 ветви проверены
+только чтением, что отдельно указано в README.
+
+**Живой сервер:** test DC 2 149.154.167.40:443, DH по TCP прошёл. HTTP:80
+доступен и отвечает `HTTP/1.0  200 OK` с двумя пробелами; reqwest возвращает
+Parse(Status), поэтому HTTP live test завершился ошибкой. Ни аккаунта, ни API
+запросов, ни production DC. Internet proxy/fake TLS не проверялись.
+
+Rust 1.95.0: cargo fmt --check **0**, cargo clippy --workspace --all-targets --
+-D warnings **0**, cargo test --workspace **0**: 515 passed, 0 failed, 2 ignored.
+В tg-mtproto — 55 ordinary tests. Ручной live run: **101**, 1 passed/1 failed.
+Вывод всех команд: `crates/tg-mtproto/docs/verification/`.
+
+Зависимости tg-mtproto: aes 0.9.4, ctr 0.10.1, ige 0.2.1, reqwest 0.12.28,
+tokio 1.54.1, zeroize 1.9.1 и workspace crates. В tg-base добавлены публичные
+JSON и gzip helpers поверх уже выбранных serde_json/flate2; нового backend нет.
+
+**Отложено в этих 18 файлах:**
+
+- connection_abstract.h/.cpp → этап 2 → общая factory после решений по backend.
+- connection_http.h/.cpp → этап 2 → tolerant HTTP и HTTP-over-SOCKS.
+- details/mtproto_tcp_socket.h/.cpp → этап 2 → Digest/NTLM/Negotiate.
+- details/mtproto_tls_socket.h/.cpp → этап 2 → production X25519 и timeout→sync owner.
+- details/mtproto_web_proxy_socket.h/.cpp → этап 5 → browser Transport/webview.
+- details/mtproto_rsa_public_key.h/.cpp → этап 2 → native OAEP/malformed PEM parity.
+- details/mtproto_dump_to_text.h/.cpp → этап 2 → Qt double edge formatting.
+- mtproto_proxy_data.h/.cpp → этап 3 → raw UTF-16/полный IDNA matrix.
+- mtproto_config.h/.cpp → этап 3 → непарные UTF-16.
+
+Сохранены странности оригинала: FactorizePQ принимает пустой pq как p=1/q=0;
+validate_secret допускает секреты, которые собственный reader отвергает из-за
+лимита 32; release_on_done при несовпадении persistent key не снимает creating.
+Последний пункт подтверждён чтением. Отличия: строгая проверка некорректных
+строк/PEM, ограниченный logging gzip и double formatting, owner/events вместо Qt
+reentrancy. Часть 1 целиком не объявлена готовой, сессия на этом слиянии не начата.
+Cargo.lock не добавлен, push не выполнялся; stash base-crypto сохранён.
