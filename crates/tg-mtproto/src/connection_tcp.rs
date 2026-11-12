@@ -174,25 +174,33 @@ impl TcpCodec {
         Ok(bytes)
     }
     pub fn feed(&mut self, bytes: &[u8]) -> Result<Vec<Buffer>, TransportError> {
-        let mut bytes = bytes.to_vec();
-        self.receive.apply(&mut bytes);
-        self.buffer.extend(bytes);
-        let mut packets = Vec::new();
-        while let Some((size, prefix)) = self.protocol.packet_length(&self.buffer)? {
-            if self.buffer.len() < size {
-                break;
-            }
-            let body = &self.buffer[prefix..size];
-            let words = body.len() / 4;
-            let mut packet = tg_tl::bytes_to_primes(&body[..words * 4]);
-            if words < 3 {
-                packet.truncate(1);
-            }
-            packets.push(packet);
-            self.buffer.drain(..size);
-        }
-        Ok(packets)
+        decode_frames(&self.protocol, &mut self.receive, &mut self.buffer, bytes)
     }
+}
+fn decode_frames(
+    protocol: &Protocol,
+    receive: &mut CtrState,
+    buffer: &mut Vec<u8>,
+    bytes: &[u8],
+) -> Result<Vec<Buffer>, TransportError> {
+    let mut bytes = bytes.to_vec();
+    receive.apply(&mut bytes);
+    buffer.extend(bytes);
+    let mut packets = Vec::new();
+    while let Some((size, prefix)) = protocol.packet_length(buffer)? {
+        if buffer.len() < size {
+            break;
+        }
+        let body = &buffer[prefix..size];
+        let words = body.len() / 4;
+        let mut packet = tg_tl::bytes_to_primes(&body[..words * 4]);
+        if words < 3 {
+            packet.truncate(1);
+        }
+        packets.push(packet);
+        buffer.drain(..size);
+    }
+    Ok(packets)
 }
 /// Any Tokio byte stream works, including duplex streams used by memory tests.
 pub struct TcpConnection<S, R> {
@@ -283,44 +291,40 @@ impl<S: AsyncRead + AsyncWrite + Unpin, R: Random> TcpConnection<S, R> {
         Ok(())
     }
     pub async fn receive_into_queue(&mut self) -> Result<(), TransportError> {
-        use crate::connection_abstract::Event;
-        loop {
-            let mut bytes = [0; 8192];
-            let count = match self.stream.read(&mut bytes).await {
-                Ok(count) => count,
-                Err(error) => {
-                    self.state.events.push_back(Event::Error(-499));
-                    return Err(error.into());
-                }
-            };
-            if count == 0 {
-                self.state.disconnect();
-                return Err(TransportError::Protocol("TCP peer closed connection"));
-            }
-            let packets = match self.codec.feed(&bytes[..count]) {
-                Ok(p) => p,
-                Err(e) => {
-                    self.state.events.push_back(Event::Error(-499));
-                    return Err(e);
-                }
-            };
-            for packet in packets {
-                if packet.len() == 1 {
-                    if packet[0] != 0 {
-                        self.state.events.push_back(Event::Error(packet[0]));
-                        return Err(TransportError::Server(packet[0]));
-                    }
-                } else {
-                    self.state.push_received(packet);
-                }
-            }
-            if !self.codec.buffer.is_empty() {
-                self.state.events.push_back(Event::ReceivedSome);
-            }
-            if !self.state.received.is_empty() {
-                return Ok(());
-            }
-        }
+        receive_packets(
+            &mut self.stream,
+            &self.codec.protocol,
+            &mut self.codec.receive,
+            &mut self.codec.buffer,
+            &mut self.state,
+        )
+        .await
+    }
+    /// Separate read and write ownership. CTR counters, buffered partial frames,
+    /// queued responses, and the unsent obfuscation header are moved unchanged.
+    pub fn into_split(
+        self,
+    ) -> (
+        TcpReader<tokio::io::ReadHalf<S>>,
+        TcpWriter<tokio::io::WriteHalf<S>, R>,
+    ) {
+        let (read, write) = tokio::io::split(self.stream);
+        (
+            TcpReader {
+                stream: read,
+                protocol: self.codec.protocol.clone(),
+                receive: self.codec.receive,
+                buffer: self.codec.buffer,
+                state: self.state,
+            },
+            TcpWriter {
+                stream: write,
+                protocol: self.codec.protocol,
+                send: self.codec.send,
+                header: self.header,
+                random: self.random,
+            },
+        )
     }
     pub async fn disconnect_from_server(&mut self) -> Result<(), TransportError> {
         self.stream.shutdown().await?;
@@ -332,5 +336,107 @@ impl<S: AsyncRead + AsyncWrite + Unpin, R: Random> Exchange for TcpConnection<S,
     async fn exchange(&mut self, packet: Buffer) -> Result<Buffer, TransportError> {
         self.send_data(packet).await?;
         self.receive().await
+    }
+}
+
+/// Independent receiving half. Cancelling `receive()` while waiting for bytes is
+/// safe: partial frames already read stay in this owner's buffer.
+pub struct TcpReader<S> {
+    stream: S,
+    protocol: Protocol,
+    receive: CtrState,
+    buffer: Vec<u8>,
+    pub state: crate::connection_abstract::ConnectionState,
+}
+impl<S: AsyncRead + Unpin> TcpReader<S> {
+    pub async fn receive(&mut self) -> Result<Buffer, TransportError> {
+        if self.state.received.is_empty() {
+            receive_packets(
+                &mut self.stream,
+                &self.protocol,
+                &mut self.receive,
+                &mut self.buffer,
+                &mut self.state,
+            )
+            .await?;
+        }
+        Ok(self.state.received.pop_front().expect("received packet"))
+    }
+}
+pub struct TcpWriter<S, R> {
+    stream: S,
+    protocol: Protocol,
+    send: CtrState,
+    header: Option<[u8; 64]>,
+    random: R,
+}
+impl<S: AsyncWrite + Unpin, R: Random> TcpWriter<S, R> {
+    /// Must run to completion, or discard the connection: AsyncWrite may already
+    /// have sent part of a frame when its future is cancelled.
+    pub async fn send_data(&mut self, packet: Buffer) -> Result<(), TransportError> {
+        if packet.len() <= 2 {
+            return Err(TransportError::Protocol("missing packet body"));
+        }
+        let mut frame = self
+            .protocol
+            .frame(&tg_tl::primes_to_bytes(&packet[2..]), &mut self.random)?;
+        self.send.apply(&mut frame);
+        let bytes = if let Some(header) = self.header.take() {
+            [header.as_slice(), frame.as_slice()].concat()
+        } else {
+            frame
+        };
+        self.stream.write_all(&bytes).await?;
+        Ok(())
+    }
+    pub async fn disconnect_from_server(&mut self) -> Result<(), TransportError> {
+        self.stream.shutdown().await?;
+        Ok(())
+    }
+}
+async fn receive_packets<S: AsyncRead + Unpin>(
+    stream: &mut S,
+    protocol: &Protocol,
+    receive: &mut CtrState,
+    buffer: &mut Vec<u8>,
+    state: &mut crate::connection_abstract::ConnectionState,
+) -> Result<(), TransportError> {
+    use crate::connection_abstract::Event;
+    loop {
+        let mut bytes = [0; 8192];
+        let count = match stream.read(&mut bytes).await {
+            Ok(count) => count,
+            Err(error) => {
+                state.events.push_back(Event::Error(-499));
+                return Err(error.into());
+            }
+        };
+        if count == 0 {
+            state.disconnect();
+            return Err(TransportError::Protocol("TCP peer closed connection"));
+        }
+        let packets = match decode_frames(protocol, receive, buffer, &bytes[..count]) {
+            Ok(packets) => packets,
+            Err(error) => {
+                state.events.push_back(Event::Error(-499));
+                return Err(error);
+            }
+        };
+        for packet in packets {
+            if packet.len() == 1 {
+                if packet[0] != 0 {
+                    state.events.push_back(Event::Error(packet[0]));
+                    return Err(TransportError::Server(packet[0]));
+                }
+            } else {
+                state.push_received(packet);
+            }
+        }
+        if !buffer.is_empty() {
+            state.events.push_back(Event::ReceivedSome);
+        }
+        if !state.received.is_empty() {
+            return Ok(());
+        }
     }
 }

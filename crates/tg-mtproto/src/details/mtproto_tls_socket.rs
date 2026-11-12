@@ -2,11 +2,46 @@
 use crate::{connection_abstract::TransportError, core_types::Random};
 use tg_scheme::TlsBlock;
 /// X25519 public-key generation and permutation are explicit entropy inputs.
-/// A production provider requires a separately approved X25519 implementation.
+/// Public keys use the approved x25519-dalek implementation.
 pub trait HelloEntropy: Random {
-    fn public_key(&mut self) -> Result<[u8; 32], TransportError>;
-    fn permutation(&mut self, length: usize) -> Vec<usize>;
+    fn public_key(&mut self) -> Result<[u8; 32], TransportError> {
+        let mut secret = [0; 32];
+        self.fill(&mut secret);
+        let public = x25519_public_key(secret);
+        zeroize::Zeroize::zeroize(&mut secret);
+        Ok(public)
+    }
+    fn permutation(&mut self, length: usize) -> Vec<usize> {
+        let mut order: Vec<_> = (0..length).collect();
+        for i in (1..length).rev() {
+            let count = (i + 1) as u32;
+            let max = u32::MAX / count * count;
+            let j = loop {
+                let n = self.u32();
+                if n < max {
+                    break (n % count) as usize;
+                }
+            };
+            order.swap(i, j);
+        }
+        order
+    }
 }
+/// EVP_PKEY_keygen(NID_X25519) public point for explicitly supplied private bytes.
+pub fn x25519_public_key(mut secret: [u8; 32]) -> [u8; 32] {
+    use zeroize::Zeroize;
+    let public = x25519_dalek::x25519(secret, x25519_dalek::X25519_BASEPOINT_BYTES);
+    secret.zeroize();
+    public
+}
+#[derive(Default)]
+pub struct SystemHelloEntropy;
+impl Random for SystemHelloEntropy {
+    fn fill(&mut self, data: &mut [u8]) {
+        tg_base::random::random_fill(data);
+    }
+}
+impl HelloEntropy for SystemHelloEntropy {}
 pub struct ClientHello {
     pub data: Vec<u8>,
     pub digest: [u8; 32],

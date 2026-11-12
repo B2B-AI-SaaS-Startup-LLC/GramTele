@@ -126,3 +126,11 @@ async fn tls_adapter_on_duplex_stream() {
     };
     tokio::join!(caller, peer);
 }
+#[test]
+fn x25519_public_key_matches_original_openssl_keygen() {
+    let private = std::array::from_fn(|i| i as u8 + 1);
+    assert_eq!(
+        tg_mtproto::details::mtproto_tls_socket::x25519_public_key(private).as_slice(),
+        &include_bytes!("fixtures/tls.bin")[..32]
+    );
+}

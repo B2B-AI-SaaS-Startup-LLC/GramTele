@@ -12,4 +12,5 @@ pub mod mtproto_dc_options;
 pub mod mtproto_dh_utils;
 pub mod mtproto_proxy_data;
 pub mod mtproto_response;
+pub mod session_private;
 pub mod type_utils;
