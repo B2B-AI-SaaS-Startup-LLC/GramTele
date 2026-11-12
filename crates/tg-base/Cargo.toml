@@ -5,5 +5,33 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[dependencies]
+bytemuck = "1.25"
+crypto-bigint = { version = "0.7.11", features = ["alloc", "zeroize"] }
+crypto-primes = "0.7"
+flate2 = { version = "1.1.11", default-features = false, features = ["rust_backend"] }
+getrandom = { version = "0.4", features = ["sys_rng"] }
+hmac = "0.13"
+pbkdf2 = "0.13"
+regex = "1.13"
+sha1 = "0.11"
+sha2 = "0.11"
+tg-rpl = { path = "../tg-rpl" }
+tg-runtime = { path = "../tg-runtime" }
+zeroize = "1.8"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["fs", "signal"] }
+
+[target.'cfg(windows)'.dependencies]
+file-guard = "0.2"
+restart-manager = "0.1"
+
+[dev-dependencies]
+aes = "0.9"
+ctr = "0.10"
+hex-literal = "1.1"
+ige = "0.2"
+
 [lints]
 workspace = true
