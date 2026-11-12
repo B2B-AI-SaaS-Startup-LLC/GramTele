@@ -1,0 +1,9 @@
+[package]
+name = "tg-tl"
+version = "0.0.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+description = "TL (Type Language) runtime: buffers, primitives and serialization traits (port of lib_tl)."
+
+[dependencies]

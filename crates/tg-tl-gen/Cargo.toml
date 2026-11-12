@@ -1,0 +1,10 @@
+[package]
+name = "tg-tl-gen"
+version = "0.0.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+description = "TL schema parser and Rust code generator (port of lib_tl/tl/generate_tl.py)."
+
+[dependencies]
+crc32fast = "1"
