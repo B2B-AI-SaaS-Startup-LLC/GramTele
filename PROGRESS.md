@@ -758,3 +758,127 @@ stop/start; все события транспорта, включая ReceivedS
 на окончательном коде: fmt exit 0, clippy -D warnings exit 0, workspace tests
 exit 0 (549 passed, 0 failed, 2 ignored); полный лог обновлён. Реестр повторно
 сверен: все четыре файла сессии done, файлы следующей задачи остаются todo.
+
+
+## Этап 2: Instance, Sender и служебные загрузчики (2026-11-12)
+
+Ветка port/tg-mtproto-instance от a600eda; промежуточные коммиты d2bc816,
+cd9c34d и f1804a6. Пользовательский main-коммит 33431e2 с Cargo.lock сохранён
+и включён в ветку; собственных изменений lock-файла нет. Старые worktree и
+влитая ветка mtproto-session удалены. Stash base-crypto сохранён, push не было.
+
+Все 15 файлов текущей задачи отмечены done в ledger. Полная пофайловая таблица
+и оговорки находятся в README tg-mtproto. instance-map.md содержит 367 строк:
+355 определений функций, 11 =default с языковой заменой и тестом и одно
+объявление wipeOutput без определения/вызовов. 366 определений имеют перевод
+и связанный тест; decryptSimpleConfig дополнительно проверен нативным эталоном.
+Один прототип — только чтение, Rust API для отсутствующей функции не выдуман.
+Ссылка на тест проверяет роль функции; это не исполнение всего QObject.
+
+Instance реализует SessionEnvironment; реальным Session передаёт отдельный
+мост со снимком метаданных, ключевых событий и FIFO без цикла владения.
+RuntimeInstance владеет LocalSet-задачами сессий, ConfigLoader, общим DNS,
+резервными HTTPS запросами и base::Timer (delayed/expiry/DNS). Sender выводит
+Response из типа запроса, поддерживает done/fail, flood policy, to_dc,
+after_request, canWait/override_id и отмену по владельцу. ConcurrentSender
+держит слабый Instance и выполняет пользовательский callback через runner.
+Пять реальных форм вызова клиента компилируются в tests/sender_calls.rs.
+
+Проверено оригиналом: отдельный CMake вне клона собрал и исполнил целую
+оригинальную decryptSimpleConfig, с собственным RSA-2048 ключом и оригинальными
+TL writer/reader. Fixture public PEM + ciphertext + expected TL сохранён,
+SHA256 a766d08973566c0d14726726c6ff5d0bb7e14d8bd5b58ba3db2783c7c00bfe78.
+Исходный клон не изменялся. Повторная сборка и запуск — exit 0.
+Это не эталон всего QObject Instance и не запуск резервных интернет-сервисов.
+
+Проверено тестами: реальные Session/SessionPrivate на нескольких DC через
+DuplexTransport с независимым серверным шифрованием; migrate/FLOOD_WAIT,
+экспорт/импорт гостевой авторизации, upload.getFile (размер и SHA256), owner
+lifetime, concurrent callback order, typed API, виртуальные таймеры, пауза,
+прокси probe RTT, resolving/cache, конфиг/даты/телефон и fake HTTPS executor.
+Logout/destroy, key storage и ветки routing/error policy проверены также
+непосредственно через контроллер и его события; это не живой logout/API.
+Новых ordinary tests 34. Workspace: 583 passed, 0 failed, 2 ignored;
+в tg-mtproto 123 ordinary tests и 2 ignored live DH tests.
+
+Rust 1.95.0, команда из PORTING.md: cargo fmt --check — exit 0;
+cargo clippy --workspace --all-targets -- -D warnings — exit 0;
+cargo test --workspace — exit 0. Полный вывод и итоговые живые проверки:
+crates/tg-mtproto/docs/verification/instance-checks.log,
+instance-summary.txt и instance-live.log.
+
+Живой сервер, только тестовые DC, api_id 17349: настоящий Instance выполнил
+help.getConfig и help.getNearestDc по TCP и HTTP. Транспорт проверяется
+assert по dctransport перед выводом; подписи ранних запусков не считаются
+доказательством HTTP. Итог: TCP/HTTP — 9 DC options, country BR,
+this_dc 2, nearest_dc 1. Код/QR, аккаунт, production DC и другие прикладные
+API-методы не использованы. Служебный DH/PFS выполняется настоящей сессией.
+Живой сервер не выявил новой ошибки криптографии конверта. Нашлась ошибка
+драйвера/проверки: restart перезагружал опции и снимал ограничение HTTP;
+добавлен сохраняемый protocol policy и регрессионный тест. При чтении и
+тестах исправлена потеря TLS SyncTimeRequest при снятии кандидатов, добавлен
+виртуальный тест. Также проверены удержание after-записей, отсутствие циклов
+владения, замена обработчика из callback, canWait/sendDelayed и global pause.
+Не выдаём найденное при чтении за находку живого сервера.
+
+Особенности исходника сохранены: main migrate без export, guest auth failures
+без logout, первый config request не сохраняется в enumRequest, сравнение
+special endpoints игнорирует secret, простой конфиг проверяет expires,
+а не будущий date. Контракт при RSA failure представлен expects/panic.
+Повторный request ID сохраняет emplace/RequestWrap cancellation.
+Определений/маркеров AyuGram/ayu в этих 15 файлах не обнаружено; поведение
+проверялось по фактическому коду форка.
+
+Новых зависимостей нет. Пользователь отдельно разрешил существующий reqwest
+для резервных HTTPS-конфигов; исключение записано в PLAN.md. HTTP MTProto
+по-прежнему ручной AsyncRead/AsyncWrite. tg-runtime и tg-rpl не менялись.
+Qt сигналы/потоки заменены Notice/каналами/LocalSet; Core/Lang/Local получают
+ConfigApplied/WriteKeys/WriteSettings, их настоящая интеграция — последующие
+этапы и только чтение сейчас. WeakInstance Main::Session использует токен
+владельца с die/process при смене будущей сессии приложения. Dedicated helper
+возвращает FileDescription; владелец создаёт loader с TimerHost. Ожидаемого
+SHA256 в исходном loader нет: хеш проверяет стенд, production формат не менялся.
+Прокси/fake TLS живьём проверить нечем; реальные Qt/desktop/bootstrap и
+резервные Firestore/RemoteConfig не выдаются за проверку запуском.
+Вопросов, требующих решения пользователя для этой задачи, не осталось.
+
+## Итог этапа 2
+
+Полный критерий PLAN.md ещё НЕ выполнен; выполнена разрешённая часть без входа:
+
+- Консольный вход по коду на тестовом DC — не выполнен, запрещён текущим заданием.
+- Консольный вход по QR на тестовом DC — не выполнен, запрещён текущим заданием.
+- help.getConfig через каждый транспорт — выполнен для TCP и HTTP,
+  подтверждён instance-live.log с assert фактического транспорта.
+- help.getConfig через каждый прокси — не выполнен: нет живых прокси;
+  SOCKS5/Basic CONNECT/fake TLS проверены образцами/в памяти, WEB и расширенные
+  схемы HTTP-auth отложены. Нельзя считать этим закрытым весь критерий.
+
+Всего файлов этапа 2: 74; done 49, replaced 1, partial 18, todo 6.
+Все partial/todo ниже перечислены пофайлово. Номер после стрелки — этап возврата.
+Вход по коду/QR и этап 3 не начинались.
+
+- `SourceFiles/mtproto/connection_abstract.cpp` (partial) → 5 → factory браузерного WEB transport/webview.
+- `SourceFiles/mtproto/connection_abstract.h` (partial) → 5 → factory браузерного WEB transport/webview.
+- `SourceFiles/mtproto/connection_http.cpp` (partial) → 2 → br/zstd/deflate decoding и native matrix Qt idle/retry/timeout.
+- `SourceFiles/mtproto/connection_http.h` (partial) → 2 → br/zstd/deflate decoding и native matrix Qt idle/retry/timeout.
+- `SourceFiles/mtproto/details/mtproto_dump_to_text.cpp` (partial) → 2 → эталоны Qt double formatting на границах.
+- `SourceFiles/mtproto/details/mtproto_dump_to_text.h` (partial) → 2 → эталоны Qt double formatting на границах.
+- `SourceFiles/mtproto/details/mtproto_rsa_public_key.cpp` (partial) → 2 → OAEP и полная матрица malformed PEM/ASN.1.
+- `SourceFiles/mtproto/details/mtproto_rsa_public_key.h` (partial) → 2 → OAEP и полная матрица malformed PEM/ASN.1.
+- `SourceFiles/mtproto/details/mtproto_tcp_socket.cpp` (partial) → 2 → согласованный backend для Digest/NTLM/Negotiate CONNECT.
+- `SourceFiles/mtproto/details/mtproto_tcp_socket.h` (partial) → 2 → согласованный backend для Digest/NTLM/Negotiate CONNECT.
+- `SourceFiles/mtproto/details/mtproto_tls_socket.cpp` (partial) → 2 → полная native Qt signal/error matrix; timeout→SyncTimeRequest уже проверен виртуально.
+- `SourceFiles/mtproto/details/mtproto_tls_socket.h` (partial) → 2 → полная native Qt signal/error matrix; timeout→SyncTimeRequest уже проверен виртуально.
+- `SourceFiles/mtproto/details/mtproto_web_proxy_socket.cpp` (partial) → 5 → настоящий браузерный Transport/webview.
+- `SourceFiles/mtproto/details/mtproto_web_proxy_socket.h` (partial) → 5 → настоящий браузерный Transport/webview.
+- `SourceFiles/mtproto/mtproto_config.cpp` (partial) → 3 → представление raw QString с непарными UTF-16 без потерь.
+- `SourceFiles/mtproto/mtproto_config.h` (partial) → 3 → представление raw QString с непарными UTF-16 без потерь.
+- `SourceFiles/mtproto/mtproto_proxy_data.cpp` (partial) → 3 → raw UTF-16 и полная матрица Qt IDNA.
+- `SourceFiles/mtproto/mtproto_proxy_data.h` (partial) → 3 → raw UTF-16 и полная матрица Qt IDNA.
+- `SourceFiles/mtproto/web_proxy/web_proxy_frame.cpp` (todo) → 5 → webview и браузерный bridge.
+- `SourceFiles/mtproto/web_proxy/web_proxy_frame.h` (todo) → 5 → webview и браузерный bridge.
+- `SourceFiles/mtproto/web_proxy/web_proxy_transport.cpp` (todo) → 5 → webview и браузерный transport.
+- `SourceFiles/mtproto/web_proxy/web_proxy_transport.h` (todo) → 5 → webview и браузерный transport.
+- `SourceFiles/mtproto/web_proxy/web_proxy_webview.cpp` (todo) → 5 → оконный слой и backend webview.
+- `SourceFiles/mtproto/web_proxy/web_proxy_webview.h` (todo) → 5 → оконный слой и backend webview.
