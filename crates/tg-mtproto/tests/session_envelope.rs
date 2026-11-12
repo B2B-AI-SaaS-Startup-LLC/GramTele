@@ -142,3 +142,33 @@ fn authenticated_invalid_lengths_padding_and_msg_ids() {
     let packet = server_packet(&msg, 12, 4);
     assert!(decrypt_message(&key(), &packet, SESSION, 1700000000).is_ok());
 }
+
+#[test]
+fn original_handle_received_envelope_checks() {
+    let mut fixture = include_bytes!("fixtures/session-receive.bin").as_slice();
+    let mut count = 0;
+    while !fixture.is_empty() {
+        let header: Vec<_> = fixture[..20]
+            .chunks_exact(4)
+            .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+            .collect();
+        fixture = &fixture[20..];
+        let packet = tg_tl::bytes_to_primes(&fixture[..header[1] as usize * 4]);
+        fixture = &fixture[header[1] as usize * 4..];
+        let expected = tg_tl::bytes_to_primes(&fixture[..header[4] as usize * 4]);
+        fixture = &fixture[header[4] as usize * 4..];
+        let result = decrypt_message(&key(), &packet, SESSION, 1700000000);
+        assert_eq!(result.is_ok(), header[2] != 0, "native case {}", header[0]);
+        if let Ok(result) = result {
+            assert_eq!(result.bad_time, header[3] != 0);
+            assert_eq!(
+                result.message.salt,
+                expected[0] as u32 as u64 | ((expected[1] as u32 as u64) << 32)
+            );
+            assert_eq!(result.message.body, &expected[8..]);
+            assert_eq!(result.message.seq_no, expected[6] as u32);
+        }
+        count += 1;
+    }
+    assert_eq!(count, 18);
+}

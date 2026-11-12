@@ -68,3 +68,12 @@ target_include_directories(native_session PRIVATE ${SCHEME_INCLUDE} ${TELEGRAM_R
 target_compile_options(native_session PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/prefix.hpp -ffunction-sections -fdata-sections)
 target_link_options(native_session PRIVATE -Wl,--gc-sections -Wl,--wrap=RAND_bytes)
 target_link_libraries(native_session PRIVATE Qt6::Core Qt6::Gui Qt6::Network OpenSSL::Crypto)
+add_executable(native_session_receive ${REFERENCE_DIR}/session_receive.cpp
+ ${TELEGRAM_ROOT}/SourceFiles/mtproto/mtproto_auth_key.cpp
+ ${TELEGRAM_ROOT}/lib_base/base/assertion.cpp
+ ${TELEGRAM_ROOT}/lib_base/base/integration.cpp
+ ${TELEGRAM_ROOT}/lib_tl/tl/tl_basic_types.cpp)
+target_include_directories(native_session_receive PRIVATE ${SCHEME_INCLUDE} ${TELEGRAM_ROOT}/SourceFiles ${TELEGRAM_ROOT}/lib_base ${TELEGRAM_ROOT}/lib_tl ${TELEGRAM_ROOT}/lib_rpl ${TELEGRAM_ROOT}/lib_crl)
+target_compile_options(native_session_receive PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/prefix.hpp -ffunction-sections -fdata-sections)
+target_link_options(native_session_receive PRIVATE -Wl,--gc-sections)
+target_link_libraries(native_session_receive PRIVATE Qt6::Core Qt6::Gui Qt6::Network OpenSSL::Crypto)

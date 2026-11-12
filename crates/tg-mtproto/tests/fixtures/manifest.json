@@ -76,6 +76,7 @@
     "reference-tools/socks.cpp": "faa3a9e778131a7d6055eb290bb7efcb89aebba1c010b9b9eb3ce7ded11a8514",
     "http-post.bin": "bd8bb640928599674e7df8b44a6349b6edc12ee478aa372791f1c5b0955e6ec1",
     "session-envelope.bin": "bec5931787c4233ce2698e3c133fbda7db219a4fd79f5cfaea1022cf3fdd2f0d",
-    "original/SourceFiles/mtproto/session_private.cpp": "895cba17c3c40f01e14b9b831e33335ca748edbd868dfb4178dc38d6d981c2b8"
+    "original/SourceFiles/mtproto/session_private.cpp": "895cba17c3c40f01e14b9b831e33335ca748edbd868dfb4178dc38d6d981c2b8",
+    "session-receive.bin": "eb6c72a79ad7a6da30192cd5d78f49cc4f3ad57fd999f599bc1d4567b3cca246"
   }
 }
