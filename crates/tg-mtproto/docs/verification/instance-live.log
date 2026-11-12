@@ -1,0 +1,8 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/mtproto-instance' is dirty
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-instance/crates/tg-mtproto)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 28.01s
+     Running `target/debug/examples/test_dc_instance`
+TCP help.getConfig: 9 DC options
+TCP help.getNearestDc: country=BR, this_dc=2, nearest_dc=1
+HTTP help.getConfig: 9 DC options
+HTTP help.getNearestDc: country=BR, this_dc=2, nearest_dc=1

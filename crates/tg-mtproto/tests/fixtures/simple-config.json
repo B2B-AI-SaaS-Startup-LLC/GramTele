@@ -1,0 +1,7 @@
+{
+  "original_commit": "0f2a31bb420de98f331990432265b131b8d836b5",
+  "fixture_sha256": "a766d08973566c0d14726726c6ff5d0bb7e14d8bd5b58ba3db2783c7c00bfe78",
+  "source": "special_config_request.cpp: decryptSimpleConfig (original method body extracted)",
+  "key": "Own OpenSSL-generated 2048-bit signing key; only public key saved",
+  "build": "/tmp/ayugram-instance-reference, Qt 6.11.2/OpenSSL 3.6.5; source clone read only"
+}

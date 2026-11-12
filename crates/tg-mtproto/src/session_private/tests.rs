@@ -2972,3 +2972,6 @@ async fn duplex_server_state_requests_resend_requests_and_acks() {
         tg_runtime::main_queue().set_waker(None);
     }
 }
+
+#[path = "instance_tests.rs"]
+mod instance_tests;

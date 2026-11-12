@@ -638,6 +638,11 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         self.connect_to_server(false);
     }
     fn connecting_timed_out(&mut self) {
+        for candidate in self.candidates.values() {
+            if !candidate.spec.http && candidate.spec.endpoint.secret.first() == Some(&0xee) {
+                self.sync_time_request();
+            }
+        }
         for &id in self.candidates.keys() {
             self.actions.push_back(TransportAction::TimedOut(id));
         }

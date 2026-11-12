@@ -349,6 +349,7 @@ pub enum SessionCommand {
         request_id: i32,
         msg_id: u64,
     },
+    SendAnything(i64),
     Restart,
     Stop,
     Kill,
@@ -368,6 +369,12 @@ pub enum TransportEvent {
         id: u64,
         tag: String,
         full_timeout: i64,
+    },
+    ProbeConnected {
+        id: u64,
+        tag: String,
+        full_timeout: i64,
+        ping_time: i64,
     },
     Disconnected(u64),
     Error(u64, i32),
@@ -462,6 +469,7 @@ pub struct Session<C: SessionClock, R: Random> {
     info: ClientInfo,
     host: Rc<TimerHost>,
     private: Option<SessionPrivate<SharedClock<C>, SharedRandom<R>>>,
+    protocol_policy: Option<(bool, bool, bool)>,
     pending_actions: VecDeque<TransportAction>,
     main: mpsc::UnboundedReceiver<MainCommand>,
     commands: mpsc::UnboundedReceiver<SessionCommand>,
@@ -515,6 +523,7 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
             info,
             host,
             private: None,
+            protocol_policy: None,
             pending_actions: VecDeque::new(),
             main,
             commands,
@@ -569,6 +578,17 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
     }
     pub fn refresh_options(&self) {
         self.data.refresh_options();
+        if let Some((tcp, http, ipv6)) = self.protocol_policy {
+            let mut options = self.data.options();
+            options.use_tcp &= tcp;
+            options.use_http &= http;
+            options.use_ipv6 &= ipv6;
+            self.data.set_options(options);
+        }
+    }
+    pub fn set_protocol_policy(&mut self, tcp: bool, http: bool, ipv6: bool) {
+        self.protocol_policy = Some((tcp, http, ipv6));
+        self.re_init_connection();
     }
     pub fn set_connection_not_inited(&self) {
         self.data.dc.set_connection_inited(false);
@@ -749,7 +769,7 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
         if self.killed {
             return;
         }
-        if self.paused {
+        if self.paused || crate::facade::paused() {
             self.need_receive = true;
             return;
         }
@@ -819,6 +839,12 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
                 id,
                 tag,
                 full_timeout,
+            }
+            | TransportEvent::ProbeConnected {
+                id,
+                tag,
+                full_timeout,
+                ..
             } => private.on_connected(id, true, tag, full_timeout),
             TransportEvent::Disconnected(id) => private.on_disconnected(id),
             TransportEvent::Error(id, code) => private.on_error(id, code),
@@ -852,6 +878,7 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
             match command {
                 SessionCommand::Send { handle, can_wait } => self.send_prepared(handle, can_wait),
                 SessionCommand::Cancel { request_id, msg_id } => self.cancel(request_id, msg_id),
+                SessionCommand::SendAnything(wait) => self.send_anything(wait),
                 SessionCommand::Restart => self.restart(),
                 SessionCommand::Stop => self.stop(),
                 SessionCommand::Kill => self.kill(),
@@ -912,6 +939,7 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
         match command {
             SessionCommand::Send { handle, can_wait } => self.send_prepared(handle, can_wait),
             SessionCommand::Cancel { request_id, msg_id } => self.cancel(request_id, msg_id),
+            SessionCommand::SendAnything(wait) => self.send_anything(wait),
             SessionCommand::Restart => self.restart(),
             SessionCommand::Stop => self.stop(),
             SessionCommand::Kill => self.kill(),

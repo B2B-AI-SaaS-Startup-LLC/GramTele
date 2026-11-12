@@ -96,3 +96,28 @@ Network queue и restart заменены sink-обвязкой, DebugEnabled=fa
 accepted, badTime, decrypted words; затем packet и decrypted header+body.
 
 Случай 18 хранит packet words=0 как компактное описание входа из 4 194 305 нулевых слов; C++ выполняет его целиком, Rust восстанавливает его перед проверкой. Это проверка верхней границы размера без 16 MiB нулей в fixture.
+
+## Простой резервный конфиг
+
+`extract_simple_config.py TELEGRAM_ROOT REFERENCE_DIR/simple_config.cpp`
+извлекает целиком decryptSimpleConfig. Меняются имя класса, публичный ключ
+(собственный тестовый) и добавляется диагностика перед return false. Алгоритм
+RSA/AES-CBC/SHA256 и оригинальный TL reader остаются исходными. Оригинальный
+TL writer независимо строит boxed help.configSimple. Обвязка генерирует RSA-2048,
+подписывает payload private RSA NO_PADDING и проверяет исходным методом; Qt
+writer повторно пишет тот же TL. Target `native_simple_config` собирается в
+отдельном каталоге с теми же TELEGRAM_ROOT, REFERENCE_DIR, SCHEME_INCLUDE и
+SCHEME_OBJECT, что native_tls. Нужны Qt Core/Gui/Network и OpenSSL в Nix.
+
+```bash
+cmake --build /tmp/ayugram-instance-reference --target native_simple_config
+/tmp/ayugram-instance-reference/native_simple_config /tmp/simple-config.bin
+```
+
+Аргумент — выходной файл: три записи u32 LE length + bytes (public PEM,
+base64 ciphertext, expected boxed TL). Приватный ключ не сохраняется. При каждом
+создании берётся новый ключ, поэтому повторный запуск проверяет алгоритм, но
+не воспроизводит байты старого fixture. Зафиксированный fixture и его SHA256 —
+`tests/fixtures/simple-config.bin` и `.json`; Rust проверяет именно этот образец.
+В этой задаче повторная сборка и запуск завершились с exit 0. Полный QObject
+Instance и сетевые Firestore/RemoteConfig в этом эталоне не исполняются.
