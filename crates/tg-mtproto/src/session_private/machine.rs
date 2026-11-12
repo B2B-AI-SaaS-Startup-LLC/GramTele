@@ -1786,9 +1786,8 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         depth: usize,
     ) -> HandleResult {
         use HandleResult::*;
-        let Some(&constructor) = body.first() else {
-            return ParseError;
-        };
+        tg_base::expects!(!body.is_empty());
+        let constructor = body[0];
         let mut cursor = Cursor::new(&body[1..]);
         match constructor as u32 {
             GZIP_PACKED => {
