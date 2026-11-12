@@ -1,4 +1,5 @@
 use super::*;
+use crate::mtproto_response::Error;
 use crate::{
     mtp_instance::{Fields, Instance, Mode},
     sender::Sender,
@@ -512,5 +513,410 @@ fn delayed_initial_request_keeps_deadline_and_send_delayed_flushes() {
         } else {
             false
         }));
+    instance.shutdown();
+}
+#[test]
+fn weak_sender_lifetimes_and_unavailable_callbacks_are_guarded() {
+    let _main = main_lock();
+    use crate::dedicated_file_loader::WeakInstance;
+    let instance = Instance::new(
+        Mode::Normal,
+        Fields::new(crate::mtproto_dc_options::Environment::Test),
+    );
+    let owner = Arc::new(());
+    let weak = WeakInstance::new(instance.clone(), Arc::downgrade(&owner));
+    let failed = Arc::new(Mutex::new(Vec::new()));
+    let errors = failed.clone();
+    weak.send(
+        tg_scheme::HelpGetConfig::new(),
+        |_| {},
+        move |error| errors.lock().unwrap().push(error.kind.clone()),
+        0,
+    );
+    drop(owner);
+    weak.process();
+    assert_eq!(*failed.lock().unwrap(), vec!["CLIENT_UNAVAILABLE"]);
+    assert!(!weak.valid());
+    drop(weak);
+    let absent = WeakInstance::new(instance.clone(), std::sync::Weak::new());
+    absent.send(
+        tg_scheme::HelpGetConfig::new(),
+        |_| {},
+        |_| panic!("callback outlived WeakInstance"),
+        0,
+    );
+    drop(absent);
+    tg_runtime::process_main_queue();
+    let copy = WeakInstance::new(instance.clone(), std::sync::Weak::new());
+    let called = Arc::new(Mutex::new(false));
+    let out = called.clone();
+    copy.send(
+        tg_scheme::HelpGetConfig::new(),
+        |_| {},
+        move |_| *out.lock().unwrap() = true,
+        0,
+    );
+    tg_runtime::process_main_queue();
+    assert!(*called.lock().unwrap());
+    let store = Arc::downgrade(&instance.store);
+    let queue = Arc::new(Mutex::new(VecDeque::<Box<dyn FnOnce() + Send>>::new()));
+    let jobs = queue.clone();
+    let concurrent = crate::mtproto_concurrent_sender::ConcurrentSender::new(
+        instance.clone(),
+        Arc::new(move |job| jobs.lock().unwrap().push_back(job)),
+    );
+    drop(copy);
+    drop(instance);
+    assert!(store.upgrade().is_none());
+    let id = concurrent
+        .request(tg_scheme::HelpGetConfig::new())
+        .done_plain(|| panic!("dead Instance callback"))
+        .send();
+    assert!(concurrent.pending(id));
+    tg_runtime::process_main_queue();
+    drop(concurrent);
+    tg_runtime::process_main_queue();
+}
+#[test]
+fn observer_streams_config_time_and_global_errors_follow_source() {
+    let _main = main_lock();
+    let instance = Instance::new(
+        Mode::Normal,
+        Fields::new(crate::mtproto_dc_options::Environment::Test),
+    );
+    instance.start();
+    let mut dc = instance.main_dc_id_value();
+    assert_eq!(dc.try_recv().unwrap(), 2);
+    instance.suggest_main_dc_id(3);
+    assert_eq!(dc.try_recv().unwrap(), 3);
+    instance.suggest_main_dc_id(1);
+    assert!(dc.try_recv().is_err());
+    let mut writes = instance.write_keys_requests();
+    let mut temporary = instance.temporary_key_changes();
+    instance.dc_persistent_key_changed(
+        3,
+        Some(Arc::new(AuthKey::new(KeyType::Generated, 3, [1; 256], 1))),
+    );
+    assert_eq!(temporary.try_recv().unwrap(), 3);
+    assert!(writes.try_recv().is_ok());
+    let mut restarts = instance.restarts_by_timeout();
+    instance.emit(InstanceEvent::RestartedByTimeout(3));
+    let mut frozen = instance.frozen_error_received();
+    let mut premium = instance.non_premium_delayed_requests();
+    let id = instance.send(
+        &tg_scheme::HelpGetConfig::new(),
+        Default::default(),
+        0,
+        0,
+        0,
+        0,
+    );
+    let response = Response {
+        request_id: id,
+        ..Default::default()
+    };
+    assert!(instance.on_error_default(
+        &Error {
+            code: 420,
+            kind: "FLOOD_PREMIUM_WAIT_0".into(),
+            description: String::new()
+        },
+        &response
+    ));
+    instance.emit(InstanceEvent::Callback(Response {
+        request_id: 0,
+        reply: vec![],
+        ..Default::default()
+    }));
+    instance.process(100);
+    assert_eq!(restarts.try_recv().unwrap(), 3);
+    assert_eq!(premium.try_recv().unwrap(), id);
+    instance.on_error_default(
+        &Error {
+            code: 400,
+            kind: "FROZEN_METHOD_INVALID".into(),
+            description: String::new(),
+        },
+        &response,
+    );
+    assert!(frozen.try_recv().is_ok());
+    let mut states = Vec::new();
+    let state = Arc::new(Mutex::new(Vec::new()));
+    let shared = state.clone();
+    instance.set_state_changed_handler(Some(Box::new(move |dc, value| {
+        shared.lock().unwrap().push((dc, value))
+    })));
+    let shared = state.clone();
+    instance.set_session_reset_handler(Some(Box::new(move |dc| {
+        shared.lock().unwrap().push((dc, 99))
+    })));
+    instance.emit(InstanceEvent::StateChange(3, 2));
+    instance.emit(InstanceEvent::SessionReset(3));
+    instance.process(100);
+    states.extend(state.lock().unwrap().iter().copied());
+    assert_eq!(states, vec![(3, 2), (3, 99)]);
+    instance.clear_global_handlers();
+    instance.cancel(id);
+    instance.set_languages("ru".into(), "ru".into(), "tdesktop".into());
+    assert_eq!(instance.system_lang_code(), "ru");
+    assert_eq!(instance.cloud_lang_code(), "ru");
+    assert_eq!(instance.lang_pack_name(), "tdesktop");
+    let _ = instance.environment();
+    let _ = instance.config_values();
+    instance.set_user_phone("+7".into());
+    assert_eq!(instance.user_phone(), "+7");
+    instance.shutdown();
+}
+#[test]
+fn nested_global_pause_defers_real_session_delivery_until_unpaused() {
+    let _main = main_lock();
+    let instance = Instance::new(
+        Mode::Normal,
+        Fields::new(crate::mtproto_dc_options::Environment::Test),
+    );
+    let sender = Sender::new(instance.clone());
+    let called = Arc::new(Mutex::new(false));
+    let out = called.clone();
+    let id = sender
+        .request(tg_scheme::HelpGetNearestDc::new())
+        .done(move |_| *out.lock().unwrap() = true)
+        .send();
+    let spawn = instance.take_session_spawns().pop_front().unwrap();
+    let clock = TestClock::new();
+    let host = TimerHost::new(Arc::new(clock.time.clone()));
+    let (mut session, handle) = crate::session::Session::new(
+        spawn.id,
+        spawn.dc,
+        instance.session_environment(),
+        instance.store.clone(),
+        crate::session::SessionParameters {
+            clock,
+            random: Entropy(23),
+            host,
+            info: ClientInfo::default(),
+        },
+    );
+    instance.attach_session(2, handle);
+    session
+        .data
+        .queues
+        .lock()
+        .unwrap()
+        .received
+        .push_back(Response {
+            request_id: id,
+            reply: tg_tl::serialize(&tg_scheme::mtp_nearest_dc(b"XX".to_vec(), 2, 1)),
+            ..Default::default()
+        });
+    crate::facade::pause();
+    crate::facade::pause();
+    session.try_to_receive();
+    tg_runtime::process_main_queue();
+    instance.process(100);
+    let before = *called.lock().unwrap();
+    crate::facade::unpause();
+    instance.process(100);
+    session.process();
+    let middle = *called.lock().unwrap();
+    crate::facade::unpause();
+    instance.process(100);
+    session.process();
+    tg_runtime::process_main_queue();
+    instance.process(100);
+    assert!(!before && !middle);
+    assert!(*called.lock().unwrap());
+    assert!(!crate::facade::paused());
+    instance.shutdown();
+}
+#[test]
+fn tls_timeout_notifies_time_owner_before_candidates_are_dropped() {
+    let _main = main_lock();
+    let mut h = Harness::new();
+    h.p.destroy_all_connections();
+    h.p.connect_to_server(false);
+    let mut count = 0;
+    for candidate in h.p.candidates.values_mut() {
+        if !candidate.spec.http {
+            candidate.spec.endpoint.secret = vec![0xee; 21];
+            count += 1;
+        }
+    }
+    assert!(count > 0);
+    h.p.clock.time.advance(1000);
+    h.p.process_timers();
+    h.drain();
+    tg_runtime::process_main_queue();
+    assert_eq!(
+        h.env
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| matches!(event, InstanceEvent::SyncHttpUnixtime))
+            .count(),
+        count
+    );
+}
+#[test]
+fn configuration_expiry_cdn_and_protocol_layer_use_virtual_time() {
+    let _main = main_lock();
+    let instance = Instance::new(
+        Mode::Normal,
+        Fields::new(crate::mtproto_dc_options::Environment::Test),
+    );
+    instance.process_at(Time {
+        monotonic_ms: 0,
+        unix_seconds: 1700000000,
+    });
+    let config = tg_scheme::Config::Config(Arc::new(tg_scheme::ConfigData {
+        date: 1700000000,
+        expires: 1700007200,
+        ..Default::default()
+    }));
+    instance.apply_config(&config, false);
+    assert_eq!(instance.request_config_if_expired(), Some(3600000));
+    instance.take_notices();
+    instance.request_config_if_old();
+    assert!(instance.take_notices().is_empty());
+    instance.process_at(Time {
+        monotonic_ms: 3600000,
+        unix_seconds: 1700003600,
+    });
+    assert_eq!(instance.request_config_if_expired(), Some(3600000));
+    instance.process_at(Time {
+        monotonic_ms: 7200000,
+        unix_seconds: 1700007200,
+    });
+    assert_eq!(instance.request_config_if_expired(), None);
+    assert!(instance
+        .take_notices()
+        .contains(&crate::mtp_instance::Notice::ConfigNeeded));
+    let mut changes = instance.subscribe();
+    let id = instance.request_cdn_config();
+    assert_ne!(id, 0);
+    assert_eq!(instance.request_cdn_config(), 0);
+    instance.process_callback(&Response {
+        request_id: id,
+        reply: tg_tl::serialize(&tg_scheme::mtp_cdn_config(vec![])),
+        ..Default::default()
+    });
+    assert!(matches!(
+        changes.try_recv(),
+        Ok(EnvironmentChange::CdnConfig)
+    ));
+    let id = instance.send_protocol_message(2, &tg_scheme::DestroyAuthKey::new());
+    assert!(!instance.session_environment().has_callback(id));
+    instance.with_config(|config| assert!(config.is_test_mode()));
+    instance.shutdown();
+}
+#[test]
+fn forced_http_policy_survives_refresh_and_restart() {
+    let _main = main_lock();
+    let instance = Instance::new(
+        Mode::Normal,
+        Fields::new(crate::mtproto_dc_options::Environment::Test),
+    );
+    let clock = TestClock::new();
+    let host = TimerHost::new(Arc::new(clock.time.clone()));
+    let (mut session, _handle) = crate::session::Session::new(
+        2,
+        Arc::new(Dcenter::new(2, None)),
+        instance.session_environment(),
+        instance.store.clone(),
+        crate::session::SessionParameters {
+            clock: clock.clone(),
+            random: Entropy(31),
+            host,
+            info: ClientInfo::default(),
+        },
+    );
+    session.take_transport_actions();
+    session.set_protocol_policy(false, true, false);
+    for _ in 0..2 {
+        clock.time.advance(1);
+        session.process();
+        let connects = session
+            .take_transport_actions()
+            .into_iter()
+            .filter_map(|action| {
+                if let TransportAction::Connect(spec) = action {
+                    Some(spec)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        assert!(!connects.is_empty());
+        assert!(connects.iter().all(|spec| spec.http));
+        assert!(!session.data.options().use_tcp);
+        session.restart();
+    }
+    instance.shutdown();
+}
+#[test]
+fn instance_controls_main_download_sessions_and_metadata() {
+    let _main = main_lock();
+    let mut fields = Fields::new(crate::mtproto_dc_options::Environment::Test);
+    fields.device_model = "Default".into();
+    fields.system_version = "Test OS".into();
+    let instance = Instance::new(Mode::Normal, fields);
+    instance.start();
+    instance.ensure_session(crate::facade::download_dc_id(2, 0));
+    let dc = instance.get_dc_by_id(2);
+    assert!(Arc::ptr_eq(&dc, &instance.get_dc_by_id(160002)));
+    let clock = TestClock::new();
+    let mut sessions = Vec::new();
+    for spawn in instance.take_session_spawns() {
+        let host = TimerHost::new(Arc::new(clock.time.clone()));
+        let (session, handle) = crate::session::Session::new(
+            spawn.id,
+            spawn.dc,
+            instance.session_environment(),
+            instance.store.clone(),
+            crate::session::SessionParameters {
+                clock: clock.clone(),
+                random: Entropy(spawn.id as u64),
+                host,
+                info: ClientInfo::default(),
+            },
+        );
+        instance.attach_session(spawn.id, handle);
+        sessions.push(session);
+    }
+    assert_eq!(sessions.len(), 2);
+    instance.stop_session(0);
+    instance.stop_session(2);
+    for s in &mut sessions {
+        s.process();
+    }
+    assert_eq!(instance.dcstate(0), CONNECTING);
+    instance.stop_session(160002);
+    for s in &mut sessions {
+        s.process();
+    }
+    assert_eq!(instance.dcstate(160002), DISCONNECTED);
+    instance.restart(Some(2));
+    for s in &mut sessions {
+        s.process();
+    }
+    assert!(instance.dcstate(2) < 0);
+    instance.restart(None);
+    for s in &mut sessions {
+        s.process();
+    }
+    instance.set_device_model("Custom".into());
+    assert_eq!(instance.device_model(), "Custom");
+    instance.set_device_model(String::new());
+    assert_eq!(instance.device_model(), "Default");
+    assert_eq!(instance.system_version(), "Test OS");
+    instance.re_init_connection(2);
+    instance.ping();
+    instance.send_anything(2, 0);
+    for s in &mut sessions {
+        s.process();
+    }
+    instance.kill_session(160002);
+    assert!(instance.session(160002).is_none());
+    assert!(std::panic::catch_unwind(|| instance.kill_session(2)).is_err());
     instance.shutdown();
 }

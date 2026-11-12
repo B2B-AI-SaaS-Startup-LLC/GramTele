@@ -83,21 +83,13 @@ impl ProxyCheckers {
     pub fn process_event(
         &mut self,
         event: &TransportEvent,
-        now: i64,
+        _now: i64,
     ) -> Option<(u64, Result<i32, ()>)> {
-        let (id, connected) = match event {
-            TransportEvent::Connected { id, .. } => (*id, true),
-            TransportEvent::Disconnected(id) | TransportEvent::Error(id, _) => (*id, false),
+        let (id, result) = match event {
+            TransportEvent::ProbeConnected { id, ping_time, .. } => (*id, Ok(*ping_time as i32)),
+            TransportEvent::Disconnected(id) | TransportEvent::Error(id, _) => (*id, Err(())),
             _ => return None,
         };
-        let start = *self.checks.get(&id)?;
-        Some((
-            id,
-            if connected {
-                Ok((now - start) as i32)
-            } else {
-                Err(())
-            },
-        ))
+        self.checks.contains_key(&id).then_some((id, result))
     }
 }

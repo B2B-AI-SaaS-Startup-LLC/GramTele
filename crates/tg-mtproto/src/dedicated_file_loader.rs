@@ -61,7 +61,9 @@ impl AbstractDedicatedLoader {
         let Some(parent) = self.filepath.parent() else {
             return Err(io::Error::other("no output directory"));
         };
-        std::fs::create_dir_all(parent)?;
+        if !parent.exists() {
+            std::fs::create_dir(parent)?;
+        }
         if let Ok(metadata) = std::fs::metadata(&self.filepath) {
             let size = metadata.len();
             if size < self.chunk_size || size > MAX_FILE_SIZE {
@@ -338,6 +340,7 @@ pub struct WeakInstance {
     sender: Sender,
     owner: std::sync::Weak<()>,
     alive: Arc<std::sync::atomic::AtomicBool>,
+    object_alive: Arc<std::sync::atomic::AtomicBool>,
 }
 impl WeakInstance {
     pub fn new(instance: Instance, owner: std::sync::Weak<()>) -> Self {
@@ -346,6 +349,7 @@ impl WeakInstance {
             sender: Sender::new_weak(instance),
             owner,
             alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            object_alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         }
     }
     pub fn valid(&self) -> bool {
@@ -391,11 +395,17 @@ impl WeakInstance {
     {
         let fail: WeakFailure = Arc::new(fail);
         if !self.valid() {
+            let alive = Arc::downgrade(&self.object_alive);
             tg_runtime::on_main(move || {
-                fail(&crate::mtproto_response::Error::local(
-                    "UNAVAILABLE",
-                    "MTP instance is not available.",
-                ))
+                if alive
+                    .upgrade()
+                    .is_some_and(|alive| alive.load(std::sync::atomic::Ordering::Acquire))
+                {
+                    fail(&crate::mtproto_response::Error::local(
+                        "UNAVAILABLE",
+                        "MTP instance is not available.",
+                    ));
+                }
             });
             return;
         }
@@ -494,8 +504,11 @@ pub fn start_dedicated_loader(
 ) {
     let ready = Arc::new(Mutex::new(Some(ready)));
     let output = ready.clone();
-    let send_mtp = mtp.clone();
+    let send_mtp = Arc::downgrade(&mtp);
     let request = move |channel| {
+        let Some(send_mtp) = send_mtp.upgrade() else {
+            return;
+        };
         let output = output.clone();
         let fail = output.clone();
         send_mtp.send(
@@ -527,5 +540,15 @@ pub fn start_dedicated_loader(
                 done(None);
             }
         });
+    }
+}
+
+impl Drop for WeakInstance {
+    fn drop(&mut self) {
+        self.object_alive
+            .store(false, std::sync::atomic::Ordering::Release);
+        self.alive
+            .store(false, std::sync::atomic::Ordering::Release);
+        self.sender.cancel_all();
     }
 }

@@ -59,6 +59,11 @@ async fn run(http: bool) {
         runtime.process();
         let len = results.lock().unwrap().len();
         if len > printed {
+            assert_eq!(
+                instance.dctransport(0),
+                if http { "HTTP" } else { "TCP" },
+                "incorrect live transport label"
+            );
             for value in &results.lock().unwrap()[printed..] {
                 println!("{} {value}", if http { "HTTP" } else { "TCP" });
             }

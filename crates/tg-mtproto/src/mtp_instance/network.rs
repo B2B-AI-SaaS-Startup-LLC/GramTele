@@ -11,6 +11,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::mpsc;
 pub struct NetworkTransport {
     owner: Option<super::WeakInstance>,
+    tls_ids: std::collections::BTreeSet<u64>,
     tx: mpsc::UnboundedSender<TransportEvent>,
     rx: mpsc::UnboundedReceiver<TransportEvent>,
     connections: BTreeMap<
@@ -26,6 +27,7 @@ impl Default for NetworkTransport {
         let (tx, rx) = mpsc::unbounded_channel();
         Self {
             owner: None,
+            tls_ids: Default::default(),
             tx,
             rx,
             connections: BTreeMap::new(),
@@ -53,10 +55,11 @@ impl NetworkTransport {
                 .await?;
             connected.set(true);
             ready.notify_one();
-            let _ = tx.send(TransportEvent::Connected {
+            let _ = tx.send(TransportEvent::ProbeConnected {
                 id,
                 tag: "HTTP".into(),
                 full_timeout,
+                ping_time: connection.state.lock().unwrap().ping_time,
             });
             let mut tasks = TaskBag(Vec::new());
             while let Some(packet) = outgoing.recv().await {
@@ -65,6 +68,7 @@ impl NetworkTransport {
                 let tx = tx.clone();
                 tasks.0.push(tokio::task::spawn_local(async move {
                     match connection.send_data(packet).await {
+                        Ok(words) if words.is_empty() => {}
                         Ok(words) => {
                             let _ = tx.send(TransportEvent::Packet {
                                 id,
@@ -77,14 +81,19 @@ impl NetworkTransport {
                 }));
             }
         } else {
+            let fake_tls = spec.endpoint.secret.first() == Some(&0xee);
             let stream = crate::details::mtproto_tcp_socket::connect_to_host(
                 &spec.endpoint.ip,
                 spec.endpoint.port as u16,
                 &spec.proxy,
                 spec.for_files,
             )
-            .await?;
-            let fake_tls = spec.endpoint.secret.first() == Some(&0xee);
+            .await
+            .inspect_err(|_| {
+                if fake_tls {
+                    let _ = tx.send(TransportEvent::SyncTimeRequest(id));
+                }
+            })?;
             let stream: Box<dyn crate::details::mtproto_abstract_socket::ByteStream + Send> =
                 if fake_tls {
                     Box::new(
@@ -94,7 +103,10 @@ impl NetworkTransport {
                             tg_base::unixtime::now(),
                             &mut crate::details::mtproto_tls_socket::SystemHelloEntropy,
                         )
-                        .await?,
+                        .await
+                        .inspect_err(|_| {
+                            let _ = tx.send(TransportEvent::SyncTimeRequest(id));
+                        })?,
                     )
                 } else {
                     Box::new(stream)
@@ -114,10 +126,11 @@ impl NetworkTransport {
                 .await?;
             connected.set(true);
             ready.notify_one();
-            let _ = tx.send(TransportEvent::Connected {
+            let _ = tx.send(TransportEvent::ProbeConnected {
                 id,
                 tag: "TCP".into(),
                 full_timeout,
+                ping_time: connection.state.ping_time,
             });
             let (mut reader, mut writer) = connection.into_split();
             let read = async {
@@ -158,6 +171,9 @@ impl SessionTransport for NetworkTransport {
         match action {
             TransportAction::Connect(spec) => {
                 let id = spec.id;
+                if !spec.http && spec.endpoint.secret.first() == Some(&0xee) {
+                    self.tls_ids.insert(id);
+                }
                 let (tx, rx) = mpsc::unbounded_channel();
                 let events = self.tx.clone();
                 let owner = self.owner.clone();
@@ -174,11 +190,16 @@ impl SessionTransport for NetworkTransport {
                 }
             }
             TransportAction::Close(id) => {
+                self.tls_ids.remove(&id);
                 if let Some((_, task)) = self.connections.remove(&id) {
                     task.abort();
                 }
             }
-            TransportAction::TimedOut(_) => {}
+            TransportAction::TimedOut(id) => {
+                if self.tls_ids.contains(&id) {
+                    let _ = self.tx.send(TransportEvent::SyncTimeRequest(id));
+                }
+            }
         }
         Ok(())
     }

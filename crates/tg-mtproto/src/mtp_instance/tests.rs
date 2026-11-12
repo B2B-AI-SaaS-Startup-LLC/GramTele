@@ -262,14 +262,15 @@ fn proxy_checker_candidates_completion_and_cancellation() {
     assert!(!ids.is_empty());
     assert_eq!(
         check.process_event(
-            &TransportEvent::Connected {
+            &TransportEvent::ProbeConnected {
                 id: ids[0],
                 tag: "TCP".into(),
-                full_timeout: 8000
+                full_timeout: 8000,
+                ping_time: 7
             },
             120
         ),
-        Some((ids[0], Ok(20)))
+        Some((ids[0], Ok(7)))
     );
     assert_eq!(
         check.process_event(&TransportEvent::Error(ids[0], -444), 130),
@@ -478,4 +479,320 @@ fn document_and_channel_helpers_preserve_exact_message_selection() {
         tg_tl::serialize(&extract_channel(&resolved).unwrap()),
         tg_tl::serialize(&tg_scheme::mtp_input_channel(42, 99))
     );
+}
+#[test]
+fn request_error_policies_and_numeric_suffixes() {
+    for (policy, kind, code, called, delayed) in [
+        (0, "FLOOD_WAIT_2", 420, false, true),
+        (1, "FLOOD_WAIT_2", 420, true, false),
+        (1, "INTERNAL", 500, false, true),
+        (2, "INTERNAL", 500, true, false),
+        (0, "BAD_REQUEST", 400, true, false),
+    ] {
+        let instance = test_instance();
+        let sender = crate::sender::Sender::new(instance.clone());
+        let done = Arc::new(Mutex::new(false));
+        let callback = done.clone();
+        let request = sender
+            .request(tg_scheme::HelpGetConfig::new())
+            .fail(move |_| *callback.lock().unwrap() = true);
+        let request = match policy {
+            1 => request.handle_flood_errors(),
+            2 => request.handle_all_errors(),
+            _ => request,
+        };
+        let id = request.send();
+        instance.process_callback(&Response {
+            request_id: id,
+            reply: serialize(&tg_scheme::mtp_rpc_error(code, kind.as_bytes().to_vec())),
+            ..Default::default()
+        });
+        assert_eq!(*done.lock().unwrap(), called);
+        assert_eq!(instance.next_delayed_deadline().is_some(), delayed);
+        instance.cancel(id);
+    }
+    assert_eq!(numeric_suffix("FLOOD_WAIT_+1", "FLOOD_WAIT_"), None);
+    assert_eq!(
+        numeric_suffix("FLOOD_WAIT_9999999999999999", "FLOOD_WAIT_"),
+        Some(0)
+    );
+}
+#[test]
+fn proxy_dns_cache_preserves_and_prioritizes_address_order() {
+    struct Random;
+    impl crate::core_types::Random for Random {
+        fn fill(&mut self, b: &mut [u8]) {
+            b.fill(27);
+        }
+    }
+    let instance = test_instance();
+    instance.set_proxy_settings(ProxySettings {
+        selected: crate::mtproto_proxy_data::ProxyData {
+            kind: crate::mtproto_proxy_data::Type::Socks5,
+            host: "proxy.example".into(),
+            port: 1080,
+            resolved_ips: vec!["10.0.0.2".into(), "10.0.0.9".into()],
+            ..Default::default()
+        },
+        enabled: true,
+        try_ipv6: true,
+    });
+    let mut events = instance.subscribe_proxy_domains();
+    instance.apply_domain_ips(
+        "proxy.example",
+        &["10.0.0.1".into(), "10.0.0.2".into()],
+        5000,
+    );
+    assert_eq!(
+        instance.proxy_settings().selected.resolved_ips,
+        vec!["10.0.0.2", "10.0.0.1"]
+    );
+    instance.set_good_proxy_domain("proxy.example", "10.0.0.1");
+    assert_eq!(
+        instance.proxy_settings().selected.resolved_ips,
+        vec!["10.0.0.1", "10.0.0.2"]
+    );
+    instance.resolve_proxy_domain("proxy.example", 100, &mut Random);
+    let mut requests = instance
+        .poll_domain_requests(100, &mut Random)
+        .into_iter()
+        .collect::<Vec<_>>();
+    assert!(!requests.is_empty());
+    requests.sort_by_key(|r| !r.key.ipv6);
+    for request in requests {
+        let reply = if request.key.ipv6 {
+            br#"{"Answer":[{"type":28,"data":"2001:db8::1","TTL":60}]}"#.as_slice()
+        } else {
+            br#"{"Answer":[{"type":1,"data":"10.0.0.3","TTL":60}]}"#.as_slice()
+        };
+        instance.domain_request_finished(&request, reply, 100);
+    }
+    assert!(events.try_recv().is_ok());
+    assert!(instance
+        .proxy_settings()
+        .selected
+        .resolved_ips
+        .contains(&"10.0.0.3".into()));
+}
+#[test]
+fn dedicated_high_level_helpers_send_and_release_callbacks() {
+    use crate::dedicated_file_loader::*;
+    let instance = test_instance();
+    let lifetime = Arc::new(());
+    let weak = Arc::new(WeakInstance::new(
+        instance.clone(),
+        Arc::downgrade(&lifetime),
+    ));
+    let result = Arc::new(Mutex::new(None));
+    let out = result.clone();
+    start_dedicated_loader(
+        weak.clone(),
+        Location {
+            username: String::new(),
+            channel_id: 42,
+            access_hash: 99,
+            post_id: 7,
+        },
+        move |file| *out.lock().unwrap() = Some(file.is_none()),
+    );
+    let id = *instance
+        .state
+        .lock()
+        .unwrap()
+        .requests
+        .keys()
+        .last()
+        .unwrap();
+    instance.process_callback(&Response {
+        request_id: id,
+        reply: serialize(&tg_scheme::MessagesMessages::default()),
+        ..Default::default()
+    });
+    assert_eq!(*result.lock().unwrap(), Some(true));
+    let failed = Arc::new(Mutex::new(false));
+    let failure = failed.clone();
+    resolve_channel(
+        weak.clone(),
+        "missing".into(),
+        |_| panic!("missing channel accepted"),
+        move || *failure.lock().unwrap() = true,
+    );
+    let id = *instance
+        .state
+        .lock()
+        .unwrap()
+        .requests
+        .keys()
+        .last()
+        .unwrap();
+    instance.process_callback(&Response {
+        request_id: id,
+        reply: serialize(&tg_scheme::ContactsResolvedPeer::default()),
+        ..Default::default()
+    });
+    assert!(*failed.lock().unwrap());
+    assert!(weak.valid());
+    assert!(weak.session().upgrade().is_some());
+    assert!(weak.instance().is_some());
+    drop(weak);
+    instance.shutdown();
+}
+#[test]
+fn facade_shift_identifiers_and_ranges_match_source() {
+    use crate::facade::*;
+    assert_eq!(config_dc_id(2), 10002);
+    assert_eq!(logout_dc_id(2), 20002);
+    assert_eq!(updater_dc_id(2), 30002);
+    assert_eq!(group_call_stream_dc_id(2), 60002);
+    for index in 0..16 {
+        let id = download_dc_id(2, index);
+        assert!(is_download_dc_id(id));
+        assert!(is_media_cluster_dc_id(id));
+        assert!(!is_upload_dc_id(id));
+        let upload = upload_dc_id(index);
+        assert!(is_upload_dc_id(upload));
+        assert!(!is_media_cluster_dc_id(upload));
+    }
+    assert!(is_cdn_dc(8));
+    assert!(!is_cdn_dc(4));
+    assert!(is_temporary_dc_id(11002));
+    assert_eq!(get_real_id_from_temporary_dc_id(11002), 2);
+    assert_eq!(get_real_id_from_temporary_dc_id(2), 0);
+    assert_eq!(get_temporary_id_from_real_dc_id(2), 1002);
+    assert_eq!(get_temporary_id_from_real_dc_id(1002), 0);
+    assert_eq!(destroy_key_next_dc_id(2), 2560002);
+    assert_eq!(destroy_key_next_dc_id(2560002), 2570002);
+    assert_eq!(download_dc_id(2, -1), 150002);
+    assert!(std::panic::catch_unwind(|| upload_dc_id(-1)).is_err());
+    assert!(std::panic::catch_unwind(|| download_dc_id(2, 16)).is_err());
+}
+#[test]
+fn duplicate_override_preserves_emplace_and_sender_wrap_cancellation() {
+    let instance = test_instance();
+    let called = Arc::new(Mutex::new(Vec::new()));
+    let out = called.clone();
+    let first = instance.send(
+        &tg_scheme::HelpGetNearestDc::new(),
+        ResponseHandler {
+            done: Some(Box::new(move |_| {
+                out.lock().unwrap().push(1);
+                true
+            })),
+            fail: None,
+        },
+        0,
+        0,
+        0,
+        0,
+    );
+    let old = instance.state.lock().unwrap().requests[&first];
+    let out = called.clone();
+    instance.send(
+        &tg_scheme::HelpGetNearestDc::new(),
+        ResponseHandler {
+            done: Some(Box::new(move |_| {
+                out.lock().unwrap().push(2);
+                true
+            })),
+            fail: None,
+        },
+        0,
+        0,
+        0,
+        first,
+    );
+    assert_eq!(instance.state.lock().unwrap().requests[&first], old);
+    instance.process_callback(&Response {
+        request_id: first,
+        reply: vec![1],
+        ..Default::default()
+    });
+    assert_eq!(*called.lock().unwrap(), vec![1]);
+    let sender = crate::sender::Sender::new(instance.clone());
+    let id = sender
+        .request(tg_scheme::HelpGetConfig::new())
+        .done_plain(|| panic!("duplicate ID was not cancelled"))
+        .send();
+    sender
+        .request(tg_scheme::HelpGetConfig::new())
+        .override_id(id)
+        .done_plain(|| panic!("duplicate callback"))
+        .send();
+    assert!(!instance.has_callback(id));
+    assert!(sender.pending(id));
+    instance.shutdown();
+}
+#[test]
+fn logout_and_destroy_rpc_callbacks_follow_source_cleanup() {
+    let instance = test_instance();
+    let done = Arc::new(Mutex::new(0));
+    let callback = done.clone();
+    instance.dc_persistent_key_changed(
+        1,
+        Some(Arc::new(AuthKey::new(
+            crate::mtproto_auth_key::KeyType::Generated,
+            1,
+            [1; 256],
+            1,
+        ))),
+    );
+    instance.logout(move || *callback.lock().unwrap() += 1);
+    let routes = instance.state.lock().unwrap().routes.clone();
+    assert_eq!(routes.len(), 2);
+    for (id, _) in routes {
+        instance.process_callback(&Response {
+            request_id: id,
+            reply: vec![0x997275b5u32 as i32],
+            ..Default::default()
+        });
+    }
+    assert_eq!(*done.lock().unwrap(), 1);
+    assert!(instance.state.lock().unwrap().routes.is_empty());
+    let mut fields = Fields::new(Environment::Test);
+    fields.main_dc_id = -1;
+    let destroyer = Instance::new(Mode::KeysDestroyer, fields);
+    let key = Arc::new(AuthKey::new(
+        crate::mtproto_auth_key::KeyType::Generated,
+        2,
+        [2; 256],
+        1,
+    ));
+    destroyer.add_keys_for_destroy(vec![key]);
+    let logout = *destroyer
+        .state
+        .lock()
+        .unwrap()
+        .requests
+        .keys()
+        .next()
+        .unwrap();
+    destroyer.process_callback(&Response {
+        request_id: logout,
+        reply: vec![0x997275b5u32 as i32],
+        ..Default::default()
+    });
+    let destroy = *destroyer
+        .state
+        .lock()
+        .unwrap()
+        .requests
+        .keys()
+        .next()
+        .unwrap();
+    destroyer.process_callback(&Response {
+        request_id: destroy,
+        reply: serialize(&tg_scheme::mtp_destroy_auth_key_ok()),
+        ..Default::default()
+    });
+    let event = destroyer
+        .environment
+        .events
+        .lock()
+        .unwrap()
+        .pop_front()
+        .unwrap();
+    destroyer.process_event(event);
+    assert!(destroyer.get_keys_for_write().is_empty());
+    instance.shutdown();
+    destroyer.shutdown();
 }

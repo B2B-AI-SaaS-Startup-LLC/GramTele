@@ -177,13 +177,13 @@
     "path": "SourceFiles/mtproto/details/mtproto_tls_socket.h",
     "status": "partial",
     "module": "crates/tg-mtproto/src/details/mtproto_tls_socket.rs",
-    "note": "Native hello/X25519, duplex record stream; timeout→sync owner integration требует сессии; этап 2."
+    "note": "Native hello/X25519 и record stream; timeout→SyncTimeRequest подключён к Instance и проверен виртуально. Полная матрица Qt socket/error signal ordering пока только чтение, этап 2."
   },
   {
     "path": "SourceFiles/mtproto/details/mtproto_tls_socket.cpp",
     "status": "partial",
     "module": "crates/tg-mtproto/src/details/mtproto_tls_socket.rs",
-    "note": "Native hello/X25519, duplex record stream; timeout→sync owner integration требует сессии; этап 2."
+    "note": "Native hello/X25519 и record stream; timeout→SyncTimeRequest подключён к Instance и проверен виртуально. Полная матрица Qt socket/error signal ordering пока только чтение, этап 2."
   },
   {
     "path": "SourceFiles/mtproto/details/mtproto_web_proxy_socket.h",
@@ -213,13 +213,13 @@
     "path": "SourceFiles/mtproto/connection_abstract.h",
     "status": "partial",
     "module": "crates/tg-mtproto/src/connection_abstract.rs",
-    "note": "Clock/Exchange/events/packet helpers/runtime adapter; единая factory для всех backend зависит от partial TLS/WEB/HTTP; этап 2."
+    "note": "Clock/Exchange/events и NetworkTransport factory TCP/HTTP/SOCKS/Basic CONNECT/MTProxy готовы. WEB backend требует браузерного слоя этапа 5."
   },
   {
     "path": "SourceFiles/mtproto/connection_abstract.cpp",
     "status": "partial",
     "module": "crates/tg-mtproto/src/connection_abstract.rs",
-    "note": "Clock/Exchange/events/packet helpers/runtime adapter; единая factory для всех backend зависит от partial TLS/WEB/HTTP; этап 2."
+    "note": "Clock/Exchange/events и NetworkTransport factory TCP/HTTP/SOCKS/Basic CONNECT/MTProxy готовы. WEB backend требует браузерного слоя этапа 5."
   },
   {
     "path": "SourceFiles/mtproto/connection_tcp.h",
@@ -319,92 +319,92 @@
   },
   {
     "path": "SourceFiles/mtproto/mtp_instance.cpp",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "mtp_instance.rs",
+    "note": "Instance/RuntimeInstance, SessionEnvironment, arena запросов, маршрутизация/повторы/ключи и события; instance-map.md."
   },
   {
     "path": "SourceFiles/mtproto/mtp_instance.h",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "mtp_instance.rs",
+    "note": "Instance/RuntimeInstance, SessionEnvironment, arena запросов, маршрутизация/повторы/ключи и события; instance-map.md."
   },
   {
     "path": "SourceFiles/mtproto/facade.cpp",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "facade.rs",
+    "note": "Сдвиги DC и вложенная глобальная пауза с доставкой unpaused; tests."
   },
   {
     "path": "SourceFiles/mtproto/facade.h",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "facade.rs",
+    "note": "Сдвиги DC и вложенная глобальная пауза с доставкой unpaused; tests."
   },
   {
     "path": "SourceFiles/mtproto/sender.h",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "sender.rs",
+    "note": "Типизированный builder, fail policy, after/canWait/overrideId, владение обработчиками и отмена; tests."
   },
   {
     "path": "SourceFiles/mtproto/mtproto_concurrent_sender.cpp",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "mtproto_concurrent_sender.rs",
+    "note": "Слабый Instance, отправка через main queue, отдельный runner и отмена при drop; tests."
   },
   {
     "path": "SourceFiles/mtproto/mtproto_concurrent_sender.h",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "mtproto_concurrent_sender.rs",
+    "note": "Слабый Instance, отправка через main queue, отдельный runner и отмена при drop; tests."
   },
   {
     "path": "SourceFiles/mtproto/config_loader.cpp",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "config_loader.rs",
+    "note": "Перебор DC 8s, временные адреса 6s, поколение special loader, proxy/phone; виртуальные таймеры."
   },
   {
     "path": "SourceFiles/mtproto/config_loader.h",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "config_loader.rs",
+    "note": "Перебор DC 8s, временные адреса 6s, поколение special loader, proxy/phone; виртуальные таймеры."
   },
   {
     "path": "SourceFiles/mtproto/special_config_request.cpp",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "special_config_request.rs",
+    "note": "DoH/Firestore/RemoteConfig/Realtime, точные параметры, RSA/AES-CBC/SHA256/TL, дата/телефон; native fixture и fake HTTPS executor."
   },
   {
     "path": "SourceFiles/mtproto/special_config_request.h",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "special_config_request.rs",
+    "note": "DoH/Firestore/RemoteConfig/Realtime, точные параметры, RSA/AES-CBC/SHA256/TL, дата/телефон; native fixture и fake HTTPS executor."
   },
   {
     "path": "SourceFiles/mtproto/dedicated_file_loader.cpp",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "dedicated_file_loader.rs",
+    "note": "Weak lifetime, разрешение канала/сообщения, 6 чанков по 1MiB, 20ms, resume/output/progress; upload.getFile через Session в памяти. wipeOutput не определён в C++."
   },
   {
     "path": "SourceFiles/mtproto/dedicated_file_loader.h",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "dedicated_file_loader.rs",
+    "note": "Weak lifetime, разрешение канала/сообщения, 6 чанков по 1MiB, 20ms, resume/output/progress; upload.getFile через Session в памяти. wipeOutput не определён в C++."
   },
   {
     "path": "SourceFiles/mtproto/proxy_check.cpp",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "proxy_check.rs",
+    "note": "Проверка через настоящий executor, v4/v6/MTProxy, отмена и RTT probe; тесты."
   },
   {
     "path": "SourceFiles/mtproto/proxy_check.h",
-    "status": "todo",
-    "module": "",
-    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+    "status": "done",
+    "module": "proxy_check.rs",
+    "note": "Проверка через настоящий executor, v4/v6/MTProxy, отмена и RTT probe; тесты."
   }
 ]

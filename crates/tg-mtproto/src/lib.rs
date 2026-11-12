@@ -1,4 +1,4 @@
-//! Transport and authentication-key layer of AyuGram MTProto (below sessions).
+//! AyuGram MTProto transports, authentication keys, sessions and typed requests.
 #![forbid(unsafe_code)]
 pub mod config_loader;
 pub mod connection_abstract;

@@ -69,6 +69,7 @@ struct State {
     main_dc: i32,
     forced: bool,
     mode: Mode,
+    default_device: String,
     device: String,
     system: String,
     languages: [String; 3],
@@ -79,6 +80,7 @@ struct State {
     keys: BTreeMap<i32, Arc<AuthKey>>,
     requests: BTreeMap<i32, RequestHandle>,
     retired: BTreeSet<RequestHandle>,
+    orphaned: BTreeMap<i32, Vec<RequestHandle>>,
     routes: BTreeMap<i32, i32>,
     pending_waits: BTreeMap<i32, i64>,
     callbacks: BTreeMap<i32, ResponseHandler>,
@@ -98,6 +100,7 @@ struct State {
     pub_events: VecDeque<Notice>,
     notice_subscribers: Vec<mpsc::UnboundedSender<Notice>>,
     now: i64,
+    unix_seconds: i64,
     last_config: i64,
     config_expires: i64,
     config_loading: bool,
@@ -110,6 +113,7 @@ struct State {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Notice {
     WriteKeys,
+    WriteSettings,
     TemporaryKeyChanged(i32),
     AllKeysDestroyed,
     MainDc(i32),
@@ -166,6 +170,7 @@ impl Instance {
                 main_dc: main,
                 forced: fields.main_dc_id != 0,
                 mode,
+                default_device: fields.device_model.clone(),
                 device: fields.device_model,
                 system: fields.system_version,
                 languages: ["en".into(), "en".into(), "tdesktop".into()],
@@ -176,6 +181,7 @@ impl Instance {
                 keys,
                 requests: BTreeMap::new(),
                 retired: BTreeSet::new(),
+                orphaned: BTreeMap::new(),
                 routes: BTreeMap::new(),
                 pending_waits: BTreeMap::new(),
                 callbacks: BTreeMap::new(),
@@ -195,6 +201,7 @@ impl Instance {
                 pub_events: VecDeque::new(),
                 notice_subscribers: vec![],
                 now: 0,
+                unix_seconds: i64::from(tg_base::unixtime::now()),
                 last_config: 0,
                 config_expires: 0,
                 config_loading: false,
@@ -210,6 +217,7 @@ impl Instance {
         result
     }
     pub fn start(&self) {
+        assert_eq!(self.main_dc_id() == -1, self.is_keys_destroyer());
         let ids = {
             let s = self.state.lock().unwrap();
             if s.mode == Mode::KeysDestroyer {
@@ -250,8 +258,10 @@ impl Instance {
     pub fn resolved_dc_id(&self, id: i32) -> i32 {
         let main = self.main_dc_id();
         if id == 0 {
+            assert_ne!(main, -1, "Instance has no main session");
             main
         } else if bare_dc_id(id) == 0 {
+            assert_ne!(main, -1, "Instance has no main session");
             id + main
         } else {
             id
@@ -370,12 +380,19 @@ impl Instance {
                 s.dependent.insert(id, after);
             }
             let handle = self.store.lock().unwrap().insert(request);
-            s.requests.insert(id, handle);
+            if let std::collections::btree_map::Entry::Vacant(entry) = s.requests.entry(id) {
+                entry.insert(handle);
+            } else {
+                s.orphaned.entry(id).or_default().push(handle);
+            }
             let send_at = s.now + wait;
-            s.pending_waits.insert(id, send_at);
+            s.pending_waits
+                .entry(id)
+                .and_modify(|old| *old = (*old).min(send_at))
+                .or_insert(send_at);
             s.routes.insert(id, if dc == 0 { -target } else { target });
             if callbacks.done.is_some() || callbacks.fail.is_some() {
-                s.callbacks.insert(id, callbacks);
+                s.callbacks.entry(id).or_insert(callbacks);
             }
             (handle, blocked)
         };
@@ -389,14 +406,15 @@ impl Instance {
             return;
         }
         let (route, handle) = {
-            let mut s = self.state.lock().unwrap();
-            s.callbacks.remove(&id);
+            let s = self.state.lock().unwrap();
             (s.routes.get(&id).copied(), s.requests.get(&id).copied())
         };
         let msg_id = handle
             .and_then(|h| self.store.lock().unwrap().get(h).map(|r| r.get_msg_id()))
             .unwrap_or(0);
+        self.unregister_request(id);
         if let Some(dc) = route {
+            self.ensure_session(dc.abs());
             self.command(
                 dc.abs(),
                 SessionCommand::Cancel {
@@ -405,7 +423,9 @@ impl Instance {
                 },
             );
         }
-        self.unregister_request(id);
+        let callbacks = self.state.lock().unwrap().callbacks.remove(&id);
+        drop(callbacks);
+        self.sync_environment();
     }
     pub fn unregister_request(&self, id: i32) {
         let (removed, resend) = {
@@ -414,6 +434,9 @@ impl Instance {
             s.pending_waits.remove(&id);
             s.routes.remove(&id);
             let removed = s.requests.remove(&id);
+            if let Some(orphaned) = s.orphaned.remove(&id) {
+                s.retired.extend(orphaned);
+            }
             let mut affected = BTreeSet::from([id]);
             loop {
                 let before = affected.len();
@@ -514,8 +537,12 @@ impl Instance {
         self.schedule_session_destroy(id);
     }
     pub fn stop_session(&self, id: i32) {
-        if id != self.main_dc_id() {
-            self.command(id, SessionCommand::Stop);
+        if id == self.main_dc_id() {
+            return;
+        }
+        let handle = self.state.lock().unwrap().sessions.get(&id).cloned();
+        if let Some(handle) = handle {
+            handle.send(SessionCommand::Stop);
         }
     }
     pub fn get_keys_for_write(&self) -> Vec<Arc<AuthKey>> {
@@ -532,8 +559,19 @@ impl Instance {
         }
     }
     pub fn process(&self, now: i64) {
+        self.process_at(Time {
+            monotonic_ms: now,
+            unix_seconds: i64::from(tg_base::unixtime::now()),
+        });
+    }
+    pub fn process_at(&self, time: Time) {
+        let now = time.monotonic_ms;
         assert!(tg_runtime::main_queue().is_main_thread());
-        self.state.lock().unwrap().now = now;
+        {
+            let mut s = self.state.lock().unwrap();
+            s.now = now;
+            s.unix_seconds = time.unix_seconds;
+        }
         let resume = {
             let mut s = self.state.lock().unwrap();
             let mut changed = false;
@@ -552,6 +590,7 @@ impl Instance {
             };
             self.process_event(event);
         }
+        self.collect_requests();
     }
     pub fn check_delayed_requests(&self, now: i64) {
         loop {
@@ -573,34 +612,51 @@ impl Instance {
         self.state.lock().unwrap().delayed.front().map(|x| x.1)
     }
     pub fn set_updates_handler(&self, h: Option<UpdateHandler>) {
-        let mut s = self.state.lock().unwrap();
-        s.handler_epochs[0] += 1;
-        s.updates = h;
+        let old = {
+            let mut s = self.state.lock().unwrap();
+            s.handler_epochs[0] += 1;
+            std::mem::replace(&mut s.updates, h)
+        };
+        drop(old);
     }
     pub fn set_global_fail_handler(&self, h: Option<GlobalFailHandler>) {
-        let mut s = self.state.lock().unwrap();
-        s.handler_epochs[1] += 1;
-        s.global_fail = h;
+        let old = {
+            let mut s = self.state.lock().unwrap();
+            s.handler_epochs[1] += 1;
+            std::mem::replace(&mut s.global_fail, h)
+        };
+        drop(old);
     }
     pub fn set_state_changed_handler(&self, h: Option<StateHandler>) {
-        let mut s = self.state.lock().unwrap();
-        s.handler_epochs[2] += 1;
-        s.state_changed = h;
+        let old = {
+            let mut s = self.state.lock().unwrap();
+            s.handler_epochs[2] += 1;
+            std::mem::replace(&mut s.state_changed, h)
+        };
+        drop(old);
     }
     pub fn set_session_reset_handler(&self, h: Option<ResetHandler>) {
-        let mut s = self.state.lock().unwrap();
-        s.handler_epochs[3] += 1;
-        s.reset = h;
+        let old = {
+            let mut s = self.state.lock().unwrap();
+            s.handler_epochs[3] += 1;
+            std::mem::replace(&mut s.reset, h)
+        };
+        drop(old);
     }
     pub fn clear_global_handlers(&self) {
-        let mut s = self.state.lock().unwrap();
-        for epoch in &mut s.handler_epochs {
-            *epoch += 1;
-        }
-        s.updates = None;
-        s.global_fail = None;
-        s.state_changed = None;
-        s.reset = None;
+        let handlers = {
+            let mut s = self.state.lock().unwrap();
+            for epoch in &mut s.handler_epochs {
+                *epoch += 1;
+            }
+            (
+                s.updates.take(),
+                s.global_fail.take(),
+                s.state_changed.take(),
+                s.reset.take(),
+            )
+        };
+        drop(handlers);
     }
     fn broadcast(&self, change: EnvironmentChange) {
         self.environment
@@ -684,7 +740,9 @@ impl Instance {
                 self.state.lock().unwrap().notice(Notice::Restarted(dc))
             }
             InstanceEvent::BadConfigurationError => {
-                self.state.lock().unwrap().notice(Notice::BadConfiguration)
+                if !self.is_keys_destroyer() {
+                    self.state.lock().unwrap().notice(Notice::BadConfiguration);
+                }
             }
         }
     }
@@ -747,7 +805,7 @@ impl Instance {
         }
         true
     }
-    fn on_error_default(&self, error: &Error, response: &Response) -> bool {
+    pub(crate) fn on_error_default(&self, error: &Error, response: &Response) -> bool {
         let id = response.request_id;
         let route = self
             .state
@@ -1152,14 +1210,15 @@ impl Instance {
         );
     }
     pub fn shutdown(&self) {
-        let handles = {
+        let (handles, callbacks) = {
             let mut s = self.state.lock().unwrap();
-            s.callbacks.clear();
+            let callbacks = std::mem::take(&mut s.callbacks);
             s.spawns.clear();
             s.requests.clear();
             s.routes.clear();
-            std::mem::take(&mut s.sessions)
+            (std::mem::take(&mut s.sessions), callbacks)
         };
+        drop(callbacks);
         for (_, h) in handles {
             h.send(SessionCommand::Kill);
         }
@@ -1188,6 +1247,9 @@ impl Instance {
     }
     pub fn apply_config(&self, result: &tg_scheme::Config, special: bool) {
         let data = result.c_config();
+        if special && data.dc_options.is_empty() {
+            return;
+        }
         let mut s = self.state.lock().unwrap();
         if special {
             if !data.dc_options.is_empty() {
@@ -1196,8 +1258,7 @@ impl Instance {
         } else {
             s.config.apply(data);
             s.last_config = s.now;
-            s.config_expires =
-                s.now + (i64::from(data.expires) - i64::from(tg_base::unixtime::now())) * 1000;
+            s.config_expires = s.now + (i64::from(data.expires) - s.unix_seconds) * 1000;
             s.config_loading = false;
             s.notice(Notice::ConfigApplied {
                 suggested_lang: String::from_utf8_lossy(
@@ -1211,7 +1272,7 @@ impl Instance {
                     .map(|p| String::from_utf8_lossy(p).into_owned()),
             });
         }
-        let ids = s.sessions.keys().copied().collect::<Vec<_>>();
+        let ids = std::mem::take(&mut s.config.dc_options.changed);
         drop(s);
         self.sync_environment();
         for id in ids {
@@ -1268,7 +1329,14 @@ impl Instance {
         s.dcs[&if real != 0 { real } else { bare_dc_id(id) }].clone()
     }
     pub fn set_device_model(&self, device: String) {
-        self.state.lock().unwrap().device = device;
+        {
+            let mut s = self.state.lock().unwrap();
+            s.device = if device.is_empty() {
+                s.default_device.clone()
+            } else {
+                device
+            };
+        }
         self.sync_environment();
         self.re_init_connection(self.main_dc_id());
     }
@@ -1398,14 +1466,28 @@ impl Instance {
 impl Instance {
     fn collect_requests(&self) {
         let mut s = self.state.lock().unwrap();
+        let active = s
+            .sessions
+            .values()
+            .flat_map(|handle| {
+                let queues = handle.data().queues.lock().unwrap();
+                queues
+                    .to_send
+                    .values()
+                    .chain(queues.have_sent.values())
+                    .copied()
+                    .collect::<Vec<_>>()
+            })
+            .collect::<BTreeSet<_>>();
         let mut store = self.store.lock().unwrap();
         loop {
-            let referenced = s
+            let mut referenced = s
                 .requests
                 .values()
                 .chain(s.retired.iter())
                 .filter_map(|handle| store.get(*handle).and_then(|r| r.after))
                 .collect::<BTreeSet<_>>();
+            referenced.extend(active.iter().copied());
             let victims = s
                 .retired
                 .difference(&referenced)
@@ -1885,5 +1967,28 @@ impl Instance {
             .lock()
             .unwrap()
             .notice(Notice::TemporaryKeyChanged(dc));
+    }
+}
+
+impl Fields {
+    pub const NONE_MAIN_DC: i32 = -1;
+    pub const NOT_SET_MAIN_DC: i32 = 0;
+    pub const DEFAULT_MAIN_DC: i32 = 2;
+    pub const TEMPORARY_MAIN_DC: i32 = 1000;
+}
+impl Instance {
+    pub fn send_protocol_message<R: Function>(&self, dc: i32, request: &R) -> i32 {
+        let id = get_next_request_id();
+        let now = self.state.lock().unwrap().now;
+        self.send_serialized(
+            id,
+            SerializedRequest::serialize(request, now),
+            ResponseHandler::default(),
+            dc,
+            0,
+            0,
+            false,
+        );
+        id
     }
 }

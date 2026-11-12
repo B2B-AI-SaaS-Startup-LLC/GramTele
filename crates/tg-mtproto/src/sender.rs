@@ -94,7 +94,8 @@ impl Sender {
     }
     pub fn cancel(&self, id: i32) {
         if self.owner.requests.lock().unwrap().remove(&id) {
-            self.owner.handlers.lock().unwrap().remove(&id);
+            let handlers = self.owner.handlers.lock().unwrap().remove(&id);
+            drop(handlers);
             let weak = self.owner.target.clone();
             if self.owner.concurrent {
                 tg_runtime::on_main(move || {
@@ -109,7 +110,8 @@ impl Sender {
     }
     pub fn detach(&self, id: i32) {
         self.owner.requests.lock().unwrap().remove(&id);
-        self.owner.handlers.lock().unwrap().remove(&id);
+        let handlers = self.owner.handlers.lock().unwrap().remove(&id);
+        drop(handlers);
     }
     pub fn request_cancelling_discard(&self) {
         self.owner.requests.lock().unwrap().clear();
@@ -225,15 +227,18 @@ where
             }
             true
         });
-        self.sender.owner.handlers.lock().unwrap().insert(
-            id,
-            ResponseHandler {
+        self.sender
+            .owner
+            .handlers
+            .lock()
+            .unwrap()
+            .entry(id)
+            .or_insert(ResponseHandler {
                 done: if has_done { Some(done) } else { None },
                 fail: Some(fail),
-            },
-        );
-        self.sender.owner.requests.lock().unwrap().insert(id);
-        let lifetime = if self.sender.owner.concurrent {
+            });
+        let registered = self.sender.owner.requests.lock().unwrap().insert(id);
+        let lifetime = if self.sender.owner.concurrent || !registered {
             None
         } else {
             Some(Arc::new(RawLifetime {
@@ -351,6 +356,11 @@ where
             });
         } else if let Some(instance) = weak.upgrade() {
             instance.send_serialized(id, request, callbacks, dc, wait, after, true);
+            if !registered {
+                instance.cancel(id);
+                let handlers = self.sender.owner.handlers.lock().unwrap().remove(&id);
+                drop(handlers);
+            }
         }
         id
     }
@@ -397,7 +407,8 @@ struct RawLifetime {
 impl Drop for RawLifetime {
     fn drop(&mut self) {
         if let Some(owner) = self.owner.upgrade() {
-            owner.handlers.lock().unwrap().remove(&self.id);
+            let handlers = owner.handlers.lock().unwrap().remove(&self.id);
+            drop(handlers);
         }
     }
 }

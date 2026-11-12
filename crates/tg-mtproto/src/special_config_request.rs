@@ -66,7 +66,8 @@ pub fn decrypt_simple_config(
     if decoded.len() != 256 {
         return Err("Bad data size (decoded)");
     }
-    let decrypted = key.decrypt(&decoded).ok_or("RSA decrypt failed")?;
+    let decrypted = key.decrypt(&decoded).unwrap_or_default();
+    tg_base::expects!(decrypted.len() >= 32);
     decode_aes_payload(&decrypted)
 }
 pub fn decode_aes_payload(decrypted: &[u8]) -> Result<tg_scheme::HelpConfigSimple, &'static str> {

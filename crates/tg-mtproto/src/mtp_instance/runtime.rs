@@ -23,6 +23,7 @@ pub struct RuntimeInstance {
     host: Rc<TimerHost>,
     expiry: Timer,
     expiry_due: Rc<Cell<bool>>,
+    delayed: super::InstanceTimers,
     loader: Option<ConfigLoader>,
     dns: tg_base::timer::Timer,
     dns_client: reqwest::Client,
@@ -56,6 +57,7 @@ impl RuntimeInstance {
         let (dns_tx, dns_rx) = mpsc::unbounded_channel();
         let dns = Timer::in_host(&host, Some(Rc::new(|| {})));
         instance.start();
+        let delayed = super::InstanceTimers::new(instance.clone(), host.clone());
         Self {
             instance,
             info,
@@ -64,6 +66,7 @@ impl RuntimeInstance {
             host,
             expiry,
             expiry_due: due,
+            delayed,
             loader: None,
             dns,
             dns_tx,
@@ -101,8 +104,11 @@ impl RuntimeInstance {
     pub fn process(&mut self) {
         self.host.process();
         self.instance.process(tg_runtime::now());
+        self.delayed.process();
         if self.expiry_due.replace(false) {
-            self.instance.request_config();
+            if let Some(wait) = self.instance.request_config_if_expired() {
+                self.expiry.call_once(wait);
+            }
         }
         for notice in self.instance.take_service_requests() {
             match notice {
@@ -135,10 +141,9 @@ impl RuntimeInstance {
             self.instance.apply_config(&config, special);
             if !special {
                 self.loader = None;
-                let wait = (i64::from(config.c_config().expires)
-                    - i64::from(tg_base::unixtime::now()))
-                    * 1000;
-                self.expiry.call_once(wait.clamp(0, 3600000));
+                if let Some(wait) = self.instance.request_config_if_expired() {
+                    self.expiry.call_once(wait);
+                }
             }
         }
         let generation = self
@@ -223,12 +228,11 @@ impl RuntimeInstance {
                 },
             );
             if !matches!(self.policy, TransportPolicy::Automatic) {
-                let mut options = session.data.options();
-                options.use_ipv6 = false;
-                options.use_tcp = matches!(self.policy, TransportPolicy::TcpOnly);
-                options.use_http = matches!(self.policy, TransportPolicy::HttpOnly);
-                session.data.set_options(options);
-                session.re_init_connection();
+                session.set_protocol_policy(
+                    matches!(self.policy, TransportPolicy::TcpOnly),
+                    matches!(self.policy, TransportPolicy::HttpOnly),
+                    false,
+                );
             }
             let wake = handle.clone();
             host.set_alarm(Some(Rc::new(ThreadAlarm::new(clock, move || wake.wake()))));

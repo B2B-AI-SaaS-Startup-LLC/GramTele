@@ -154,3 +154,15 @@ async fn fallback_https_runner_uses_native_signed_sample_and_virtual_stagger() {
         })
         .await;
 }
+#[test]
+fn malformed_rsa_preserves_original_span_contract() {
+    let key = RsaPublicKey::from_pem(PUBLIC_KEY).unwrap();
+    let encoded = format!("{}==", "/".repeat(342));
+    assert!(std::panic::catch_unwind(|| decrypt_simple_config(encoded.as_bytes(), &key)).is_err());
+    assert!(decrypt_simple_config(b"short", &key).is_err());
+    for invalid in [b"{".as_slice(), b"[]", b"null"] {
+        assert!(parse_remote_config_response(invalid).is_empty());
+        assert!(parse_fire_store_response(invalid).is_empty());
+    }
+    assert!(parse_realtime_response(b"bad").is_empty());
+}
