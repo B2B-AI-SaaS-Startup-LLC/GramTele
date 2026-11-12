@@ -63,7 +63,12 @@ fn normalize(spec: &Spec, v: &Value) -> Result<Value, Error> {
             } else if let Some(n) = v.as_u64() {
                 n
             } else {
-                v.as_f64().ok_or_else(bad)? as i64 as u64
+                let number = v.as_f64().ok_or_else(bad)?;
+                if matches!(spec.kind, Kind::U64) {
+                    number as u64
+                } else {
+                    number as i64 as u64
+                }
             };
             match spec.kind {
                 Kind::Int => json!(n as i32),
@@ -94,7 +99,9 @@ fn normalize(spec: &Spec, v: &Value) -> Result<Value, Error> {
                     .map(i64::from)
                     .or_else(|| n.as_i64())
                     .unwrap_or_else(|| {
-                        n.as_u64().unwrap_or_else(|| n.as_f64().unwrap() as u64) as i64
+                        n.as_u64()
+                            .map(|n| n as i64)
+                            .unwrap_or_else(|| n.as_f64().unwrap() as i64)
                     });
                 ids.push(n);
             }
@@ -503,11 +510,18 @@ impl AyuSettings {
             .iter()
             .find(|s| s.key == key)
             .ok_or_else(|| Error::Type(key.into()))?;
+        let ids_buckets = value
+            .as_array()
+            .map(|a| crate::json_ext::reserve_buckets(a.len()));
         let mut value = normalize(spec, &value)?;
         if key == "translationProvider" && value == "native" && !self.native_translation_available {
             value = json!("telegram");
         }
-        if !self.settings.assign(key, value.clone()) {
+        let changed = self.settings.assign(key, value.clone());
+        if key == "shadowBanIds" {
+            self.settings.ids_buckets.set(ids_buckets.unwrap());
+        }
+        if !changed {
             return Ok(vec![]);
         }
         let effects = match key {

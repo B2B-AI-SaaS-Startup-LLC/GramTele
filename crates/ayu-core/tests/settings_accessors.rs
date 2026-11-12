@@ -48,6 +48,21 @@ macro_rules! one {($changed:expr,$expected:expr,$key:literal,$get:ident,$value:i
 (@set $s:ident,root,$set:ident,$value:expr)=>{$s.$set($value).unwrap();};
 (@set $s:ident,ghost,$set:ident,$value:expr)=>{$s.$set(0,$value).unwrap();};
 }
+macro_rules! shot {
+    ($changed:ident,$expected:expr,$key:literal,$get:ident,$changes:ident,$set:ident) => {{
+        let s = AyuSettings::default();
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(vec![]));
+        let out = seen.clone();
+        let life = tg_rpl::Lifetime::new();
+        s.message_shot
+            .$changes()
+            .on_next(move |v| out.borrow_mut().push(v.native()), &life);
+        s.$set($changed.message_shot.$get()).unwrap();
+        s.$set($changed.message_shot.$get()).unwrap();
+        assert_eq!(*seen.borrow(), vec![$expected[$key].clone()]);
+        assert_eq!(s.message_shot.$get().native(), $expected[$key]);
+    }};
+}
 #[test]
 fn typed_accessors_and_setters_match_native_values() {
     let expected: Value =
@@ -1130,5 +1145,53 @@ fn typed_accessors_and_setters_match_native_values() {
         changed.message_shot.cloud_theme_account_id(),
         changed.message_shot.cloud_theme_account_id_value(),
         &expected["messageShotSettings"]["cloudThemeAccountId"],
+    );
+    shot!(
+        changed,
+        expected["messageShotSettings"],
+        "showBackground",
+        show_background,
+        show_background_changes,
+        set_show_background
+    );
+    shot!(
+        changed,
+        expected["messageShotSettings"],
+        "showDate",
+        show_date,
+        show_date_changes,
+        set_show_date
+    );
+    shot!(
+        changed,
+        expected["messageShotSettings"],
+        "showReactions",
+        show_reactions,
+        show_reactions_changes,
+        set_show_reactions
+    );
+    shot!(
+        changed,
+        expected["messageShotSettings"],
+        "showHeaderDecorations",
+        show_header_decorations,
+        show_header_decorations_changes,
+        set_show_header_decorations
+    );
+    shot!(
+        changed,
+        expected["messageShotSettings"],
+        "showColorfulReplies",
+        show_colorful_replies,
+        show_colorful_replies_changes,
+        set_show_colorful_replies
+    );
+    shot!(
+        changed,
+        expected["messageShotSettings"],
+        "revealSpoilers",
+        reveal_spoilers,
+        reveal_spoilers_changes,
+        set_reveal_spoilers
     );
 }

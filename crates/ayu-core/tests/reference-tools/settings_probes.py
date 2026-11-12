@@ -13,5 +13,5 @@ for group,obj in [('ghostModeSettings',base['ghostModeSettings']['0']),('message
    if group=='ghostModeSettings':j[group]['0'][key]=value
    else:j[group][key]=value
    add(group+'/'+key+'/'+suffix,j)
-for name,obj in [('unknown',{'unknown':1}),('null',None),('array',[]),('legacy-theme-bad',{'messageShotSettings':{'embeddedThemeType':2,'themeType':'bad'}}),('account-id',{'ghostModeSettings':{' -1tail':{}}}),('account-overflow',{'ghostModeSettings':{'18446744073709551616':{}}}),('shadow-collisions',{'shadowBanIds':[1,14,27,0,13,26,-1,-14,-27]}),('shadow-rehash',{'shadowBanIds':list(range(300))})]:add(name,obj)
+for name,obj in [('large-float-u64',{'messageShotSettings':{'cloudThemeId':1e19}}),('large-float-u32',{'messageShotSettings':{'embeddedThemeAccentColor':4e9}}),('shadow-floats',{'shadowBanIds':[True,-1.5,2.9,1e3]}),('unknown',{'unknown':1}),('null',None),('array',[]),('legacy-theme-bad',{'messageShotSettings':{'embeddedThemeType':2,'themeType':'bad'}}),('account-id',{'ghostModeSettings':{' -1tail':{}}}),('account-overflow',{'ghostModeSettings':{'18446744073709551616':{}}}),('shadow-collisions',{'shadowBanIds':[1,14,27,0,13,26,-1,-14,-27]}),('shadow-rehash',{'shadowBanIds':list(range(300))})]:add(name,obj)
 (fixtures/'settings-probes.input.json').write_text(json.dumps(cases,ensure_ascii=False,separators=(',',':')))
