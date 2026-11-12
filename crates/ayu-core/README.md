@@ -69,7 +69,7 @@ entityCreateDate передаётся как unix_time.
 равен нулю, а не стандартным пяти секундам rusqlite. Диапазоны исключительные,
 `topicId=0` — wildcard, сортировка правок по fakeId, удалённых — по messageId;
 LIKE экранирует `%`, `_`, `\`. Удаление фильтра не удаляет его исключения.
-Низкоуровневые insert/initialize возвращают Result; публичные query/mutation
+Низкоуровневые insert/replace/initialize возвращают Result; публичные query/mutation
 методы сохраняют пустые/false/0 результаты C++ при ошибках. Диагностика Rust
 отличается от Qt LOG, ошибка save дополнительно возвращается вызывающему коду.
 
@@ -93,7 +93,9 @@ load/save/validate/ghost(userId). Core::IsAppLaunched=false, Native-перево
   первого JSON, повреждением, migration и cGhost;
 - Grisu2: фиксированная последовательность double, включая граничные bit patterns;
 - все восемь таблиц, имена/порядок столбцов, NULL, два индекса, sqlite_master,
-  строки Unicode/пустые строки и blobs с NUL/0x80/0xff;
+  строки Unicode/пустые строки и blobs с NUL/0x80/0xff; разреженные fakeId
+  (1 и 7) и fakeId=i64::MAX сохраняются явным replace, обычный insert по-прежнему
+  генерирует ключ, как в C++;
 - sync_schema: лишний/недостающий nullable/required столбец, изменение NOT NULL,
   игнорируемое изменение declared type, V0, будущая/переполненная версия,
   отсутствие строки версии с id=1;
@@ -159,7 +161,8 @@ AYUGRAM_AYU_RUST_REFERENCE_DIR=/tmp/ayu-rust-fresh cargo test -p ayu-core native
 | ayu_state.cpp/.h | 4 | Извлечение ID из HistoryItem, привязка токена Main::Session к отключению ghost |
 | data/messages_storage.cpp/.h | 4 | Извлечение значений из HistoryItem/PeerData и реальный mapper flags/entities; форматный слой уже готов |
 
-rusqlite/serde заменяют sqlite_orm/nlohmann в production. Вложенные sqlite и json
+rusqlite/serde заменяют sqlite_orm/nlohmann в production. Нативный harness связан с SQLite 3.53.3 из Nix; bundled SQLite rusqlite — 3.54.1.
+Вложенные sqlite и json
 остаются зависимостями только нативного reference harness; unsafe в ayu-core запрещён.
 
 ## Зависимости

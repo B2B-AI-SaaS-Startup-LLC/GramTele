@@ -208,7 +208,7 @@ fn native_database_schema_and_all_eight_tables_in_both_directions() {
             let rows = original.all::<$t>();
             assert!(!rows.is_empty());
             for row in &rows {
-                rust.insert(row).unwrap();
+                rust.replace(row).unwrap();
             }
             assert_eq!(rows, rust.all::<$t>());
         }};
@@ -321,6 +321,21 @@ fn regex_queries_null_blob_replace_update_exclusions_and_equality() {
         filter_id: a.id.clone(),
     });
     assert_eq!(db.get_excluded_by_dialog_id(-3), vec![a.clone()]);
+    // C++ materializes filterId through vector<char> before constructing IN.
+    let legacy = rusqlite::Connection::open(db.path()).unwrap();
+    legacy
+        .execute(
+            "UPDATE RegexFilterGlobalExclusion SET filterId=CAST(filterId AS TEXT)",
+            [],
+        )
+        .unwrap();
+    assert_eq!(db.get_excluded_by_dialog_id(-3), vec![a.clone()]);
+    legacy
+        .execute(
+            "UPDATE RegexFilterGlobalExclusion SET filterId=CAST(filterId AS BLOB)",
+            [],
+        )
+        .unwrap();
     assert_eq!(db.get_all_filters_exclusions()[0].fake_id, 1);
     assert_eq!(db.get_all_regex_filters(), vec![a.clone()]);
     db.delete_filter(&a.id);

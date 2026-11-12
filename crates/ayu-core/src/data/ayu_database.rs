@@ -192,6 +192,27 @@ impl AyuDatabase {
         tx.commit()?;
         Ok(id)
     }
+    /// sqlite_orm::replace: сохраняет явный primary key, включая разреженные fakeId.
+    /// Обычные add* используют insert и генерируют fakeId, как в C++.
+    pub fn replace<T: Record>(&self, value: &T) -> rusqlite::Result<()> {
+        let c = self.connection.lock().unwrap();
+        let tx = c.unchecked_transaction()?;
+        let columns = T::COLUMNS
+            .iter()
+            .map(|n| format!("\"{n}\""))
+            .collect::<Vec<_>>()
+            .join(",");
+        let values = value.values();
+        let placeholders = vec!["?"; values.len()].join(",");
+        tx.execute(
+            &format!(
+                "REPLACE INTO \"{}\" ({columns}) VALUES ({placeholders})",
+                T::TABLE
+            ),
+            params_from_iter(values),
+        )?;
+        tx.commit()
+    }
     pub fn all<T: Record>(&self) -> Vec<T> {
         self.select::<T>("", &[]).unwrap_or_default()
     }
@@ -320,7 +341,7 @@ impl AyuDatabase {
     }
     pub fn get_excluded_by_dialog_id(&self, id: i64) -> Vec<RegexFilter> {
         self.select(
-            "WHERE id IN (SELECT filterId FROM RegexFilterGlobalExclusion WHERE dialogId=?)",
+            "WHERE id IN (SELECT COALESCE(CAST(filterId AS BLOB), x'') FROM RegexFilterGlobalExclusion WHERE dialogId=?)",
             &[&id],
         )
         .unwrap_or_default()
