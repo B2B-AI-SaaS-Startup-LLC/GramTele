@@ -41,10 +41,10 @@
 
 ## Проверка
 
-Rust берётся из Nix. Перед сдачей работы должны проходить:
+Rust **1.95.0** берётся из nixpkgs, закреплённого в `flake.lock`.
+`nix-shell` читает тот же lock, что и `nix develop`; CI устанавливает ту же
+версию вместе с rustfmt/clippy. Проверка из корня репозитория одной командой:
 
 ```bash
-cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+nix develop --command bash -euc 'cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace'
 ```
