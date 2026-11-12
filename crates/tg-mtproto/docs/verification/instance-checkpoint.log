@@ -1,0 +1,11 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/mtproto-instance' is dirty
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-instance/crates/tg-mtproto)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.56s
+     Running unittests src/lib.rs (target/debug/deps/tg_mtproto-f36b406bc3cd365a)
+
+running 2 tests
+test mtp_instance::tests::instance_routing_callbacks_delays_and_sender_ownership ... ok
+test mtp_instance::tests::malformed_typed_reply_calls_fail_after_done_parser ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
