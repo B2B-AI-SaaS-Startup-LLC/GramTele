@@ -7,3 +7,10 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+rusqlite = { version = "0.42.0", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+tg-base = { path = "../tg-base" }
+tg-rpl = { path = "../tg-rpl" }

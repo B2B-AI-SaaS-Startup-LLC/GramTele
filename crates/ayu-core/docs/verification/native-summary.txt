@@ -1,0 +1,10 @@
+Original C++ read Rust and original C++ read own fixture: full ORM row dumps byte-identical for all 8 tables.
+Counts excluding SchemaVersion: 1 1 2 2 1 1 1
+sha256=269630ccb24af5164f04f968ecd2e23e37eb595bd91c587a34acc329c78b81ab
+Original JSON read Rust == original JSON read own fixture: cmp exit 0
+Rust JSON bytes == original JSON bytes: tests passed
+9 native schema migration scenarios
+326 native wrong-type/partial-assignment probes
+12 native load probes
+2006 native finite-double formatting samples
+Original NUL-text read: a, raw bytes remain 610062

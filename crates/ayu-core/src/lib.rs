@@ -1,1 +1,8 @@
-//! Порт: Telegram/SourceFiles/ayu/{data,utils,features/filters} и ayu_settings/ayu_state/ayu_worker/ayu_infra/ayu_lang/ayu_url_handlers оригинала AyuGramDesktop.
+#![forbid(unsafe_code)]
+//! Данные AyuGram. Пользовательские файлы открываются только по явному пути.
+pub mod ayu_settings;
+pub mod ayu_state;
+pub mod data;
+
+pub mod libs;
+use libs::json_ext;

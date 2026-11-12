@@ -1,0 +1,8 @@
+CMAKE_CXX_COMPILER:STRING=/nix/store/0592hadxldzhhd3ppc6nskslzd39fwlz-gcc-wrapper-15.3.0/bin/g++
+CMAKE_CXX_FLAGS:STRING=-isystem /nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include -isystem /nix/store/qilzww7k378fn36qlkvg579l2x033pl0-range-v3-0.12.0/include -isystem /nix/store/13zcfv30bdh4z5zm11wyb0jn0apb76cf-qtbase-6.11.2/include
+CMAKE_MAKE_PROGRAM:UNINITIALIZED=/nix/store/l7sqiai7yhlnfpgam5rqf64cy6swzacg-ninja-1.13.2/bin/ninja
+PYTHON:FILEPATH=/nix/store/6jmqjw0f3s7kl7x4ps1abab1dpaxp3yj-python3-3.12.14/bin/python3
+Qt6Core_DIR:PATH=/nix/store/13zcfv30bdh4z5zm11wyb0jn0apb76cf-qtbase-6.11.2/lib/cmake/Qt6Core
+Qt6_DIR:PATH=/nix/store/13zcfv30bdh4z5zm11wyb0jn0apb76cf-qtbase-6.11.2/lib/cmake/Qt6
+SQLITE_LIBRARY:UNINITIALIZED=/nix/store/4qqwpd1f34k9505ljggkh07p5a9pllsz-sqlite-3.53.3/lib/libsqlite3.so
+TELEGRAM_ROOT:UNINITIALIZED=/home/yarik/Projects/AyuGramDesktop/Telegram
