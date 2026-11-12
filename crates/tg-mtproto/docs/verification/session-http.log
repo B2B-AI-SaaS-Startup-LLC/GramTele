@@ -1,0 +1,15 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/mtproto-session' is dirty
+   Compiling tg-base v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-session/crates/tg-base)
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-session/crates/tg-mtproto)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.38s
+     Running tests/live_test_dc.rs (target/debug/deps/live_test_dc-2ed7c79349f22428)
+
+running 2 tests
+TEST DC HTTP: DH succeeded, keyId=bbe739cc9506e88f
+HTTP result: Ok(Ok(()))
+TEST DC TCP: DH succeeded, keyId=fcf82027b8179afd
+TCP result: Ok(Ok(()))
+test authorization_key_test_dc_http ... ok
+test authorization_key_test_dc_tcp ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.73s

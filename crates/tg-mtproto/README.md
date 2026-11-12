@@ -1,11 +1,10 @@
-# tg-mtproto: транспорт и создание ключей
+# tg-mtproto: транспорт, ключи и автомат сессии
 
-Перенос части этапа 2 ниже сессии. Создание постоянного auth key проверено на
-тестовом DC через TCP. Полный паритет всех транспортов **не достигнут**:
-HTTP упирается в разбор ответа reqwest, fake TLS требует X25519 provider,
-WEB требует браузерный Transport. Эти места имеют статус partial, не заглушки
-с успешным результатом. SessionPrivate прочитан целиком, сессия и MTP Instance
-не портировались.
+Перенос транспорта и автомата сессии этапа 2. Создание постоянного auth key проверено на
+тестовом DC через TCP и ручной HTTP. Для fake TLS используется настоящий X25519
+из x25519-dalek с подставляемой случайностью HelloEntropy. WEB требует браузерный
+Transport. Session/SessionPrivate реализованы отдельно от Instance. Сам Instance,
+sender и загрузчики остаются следующей задачей; живой help.getConfig здесь не выполнялся.
 
 ## Соединение и время
 
@@ -32,13 +31,33 @@ ConnectionState хранит очередь пакетов и событий. `r
 пачку через FIFO tg-runtime. Обратный вызов исполняется после возврата в очередь,
 а не синхронно внутри Qt signal. Удаление владельца/отмена future заменяет deleteLater.
 
-HTTP использует reqwest, POST `/api`, порт 80, Content-Type
-`application/x-www-form-urlencoded`, тело без двух reserved TCP words.
-Клоны HttpConnection — handles одного manager: поддерживаются несколько
-outstanding requests, pending count, need_http_wait и общая отмена watch channel.
-Для независимого соединения создаётся новый HttpConnection. reqwest::Client
-передаётся с нужной политикой proxy/redirect; live test использует no_proxy.
+HTTP реализован вручную поверх AsyncRead + AsyncWrite, POST `/api`, порт 80,
+Content-Type `application/x-www-form-urlencoded`, тело без двух reserved TCP words.
+`NetworkConnector` вызывает тот же `connect_to_host`, что TCP: SOCKS5 и Basic
+HTTP CONNECT доступны без reqwest. `HttpConnector` подставляет duplex в тестах.
+Клоны HttpConnection — handles одного manager: максимум шесть одновременно
+выполняющихся запросов, idle keep-alive pool, pending count, need_http_wait и общая
+отмена watch channel. Один POST занимает соединение до ответа, pipelining нет.
 `probe()` выполняет оригинальный fake req_pq и фиксирует ping/connected.
+Разбор HTTP допускает несколько пробелов в status, Content-Length, chunked/trailers,
+промежуточные 1xx и тело до EOF; заголовки ограничены 64 KiB, тело — 64 MiB.
+Поддержаны identity и gzip Content-Encoding; br/zstd/deflate дают явную ошибку.
+Заголовки по умолчанию сняты с Qt 6.11.2 на Linux: Accept-Encoding
+`zstd, br, gzip, deflate`, Accept-Language `en,*`, User-Agent `Mozilla/5.0`.
+Это зависимые от сборки Qt/локали значения; `HttpHeaders` позволяет передать их
+явно. Для полного автоматического HTTP content decoding нужны дополнительные
+backend br/zstd (не выбирались). Живой Telegram отвечает без content encoding.
+reqwest остался только у DNS-over-HTTPS; исключение записано в PLAN.md.
+
+Нативный Qt harness `tests/reference-tools/http.cpp` подтвердил: два последовательных
+POST используют одно keep-alive соединение; восемь одновременных POST используют
+шесть соединений; нормальный HTTP/1.0 ответ принимается. С двойным пробелом после
+HTTP/1.0 эта конкретная Qt 6.11.2 тоже сообщает `Connection closed` (8/8).
+Это проверка QNetworkAccessManager с теми же настройками, а не запуск полного
+клиента. Поведение иной версии/сборки Qt, системной proxy/locale, сетевых ошибок
+и автоматических повторов после закрытия idle соединения не установлено запуском.
+Семантика `http_wait` прочитана в connection_http.cpp: using=true,
+need=true при пустом наборе outstanding requests; генерация http_wait — сессия.
 
 Clock::now даёт monotonic_ms и synchronized unix_seconds; next_message_id
 предоставляет ID (в RuntimeClock — готовый tg_base::unixtime::mtproto_msg_id,
@@ -46,7 +65,7 @@ Clock::now даёт monotonic_ms и synchronized unix_seconds; next_message_id
 получает время после проверки SHA1 server_DH_inner_data. RuntimeClock соединяет
 это с tg_runtime::now и tg_base::unixtime::update. Автомат не использует
 Tokio sleep: DNS stagger и IP timeout — next_deadline/poll(now). Сессионные
-restart/ack/ping timers будут в части 2. Существующего tg-runtime достаточно
+restart/ack/ping timers реализованы в SessionPrivate поверх base::Timer. Существующего tg-runtime достаточно
 для clocks, main dispatch и фоновых очередей; его blocking executor не используется
 для асинхронного сетевого I/O. tg-runtime и tg-rpl не изменены.
 
@@ -80,10 +99,10 @@ restart/ack/ping timers будут в части 2. Существующего t
 | `DumpToText(from, end)` | `mtproto_dump_to_text::dump_to_text(&words)` |
 | `dcOptions.lookup(dc, type, throughProxy)` | `lookup`, адрес × протокол в том же порядке |
 
-RequestStore не копирует RequestData при копировании handle. Сессионные карты
-в части 2 должны владеть идентификаторами центрального хранилища и удалять
-request только после обработки зависимостей/ответов; самостоятельное клонирование
-буфера не заменяет C++ shared_ptr.
+RequestStore не копирует RequestData при копировании handle. SessionData хранит
+идентификаторы общего хранилища; служебные записи освобождаются по завершении
+и при drop. Будущий Instance освобождает API requests после обработки зависимостей
+и callbacks; самостоятельное клонирование буфера не заменяет C++ shared_ptr.
 
 ## Криптография и сериализация
 
@@ -115,7 +134,8 @@ RSA поддерживает PKCS#1 и SPKI PEM, публичную raw опер
 | aes | 0.9.4 | AES256 |
 | ctr | 0.10.1 | поток CTR |
 | ige | 0.2.1 | IGE |
-| reqwest | 0.12.28 | HTTP и DoH; rustls-tls/json features |
+| reqwest | 0.12.28 | только DoH; rustls-tls/json features |
+| x25519-dalek | 2.0.1 | настоящий public key fake TLS; разрешён отдельно |
 | tokio | 1.54.1 | I/O, futures, watch, задачи |
 | zeroize | 1.9.1 | очистка секретов; уже был в tg-base |
 | tg-base / tg-runtime / tg-scheme / tg-tl | workspace | готовые базовые примитивы и TL |
@@ -141,14 +161,10 @@ IGE, DH и совпадение auth key, успешный ответ и retry. 
 gzip/layer и CRC/budget ошибки gzip. Непустой g_b/secret power и порядок bytes
 проверены успешным обменом, а не одним roundtrip одного codec.
 
-Живой сервер: тестовый DC 2, 149.154.167.40, TCP:443 — DH success.
-HTTP:80 — отказ reqwest `Parse(Status)`. Диагностика отправила только req_pq_multi
-и получила `HTTP/1.0  200 OK` (два пробела). Сервер доступен; это несовместимость
-парсера, а не отсутствие сети. В публичных настройках reqwest нет флага для
-multiple spaces в status delimiters; [ClientBuilder](https://docs.rs/reqwest/latest/reqwest/struct.ClientBuilder.html).
-Нужен upstream/локальный patch reqwest+hyper для доступа к настройке httparse,
-либо отдельно согласованный backend/connector. Такой patch/backend не добавлялся.
-Полный вывод — [live-test-dc.log](docs/verification/live-test-dc.log).
+Живой сервер: тестовый DC 2, 149.154.167.40, TCP:443 и HTTP:80 — DH success.
+Ручной HTTP принимает настоящий `HTTP/1.0  200 OK`, ранее отвергавшийся reqwest.
+Вывод текущего запуска — [session-http.log](docs/verification/session-http.log).
+Предыдущий отказ сохранён как исторический [live-test-dc.log](docs/verification/live-test-dc.log).
 Аккаунт/api_id не использовались, API requests не посылались, production DC не трогались.
 
 Запуск вручную: `nix develop --command cargo test -p tg-mtproto --test live_test_dc -- --ignored --nocapture`.
@@ -171,11 +187,10 @@ OAEP, все варианты ASN.1/Qt IDNA и JSON numerics на экстрем
   не имеет этих лимитов; неполный gzip также отклоняется. Double formatting реализован с шестью значащими цифрами,
   все пограничные Qt случаи ещё не сверены. Крипто/сетевые байты это не меняет.
 - Только plain/Basic HTTP CONNECT; Digest/NTLM/Negotiate дают явную ошибку.
-  Reqwest HTTP-over-SOCKS потребует отдельно согласовать socks feature и её backend.
-- Для fake TLS есть полный rule interpreter/record adapter и HelloEntropy input.
-  Нет production X25519 provider в разрешённом наборе. Варианты: согласовать
-  подходящий RustCrypto backend либо отдельный X25519 crate; самостоятельно
-  выбирать его или подменять публичную точку случайными байтами порт не стал.
+- Fake TLS: default HelloEntropy генерирует private bytes и вычисляет настоящий
+  X25519 public key, private временный буфер очищается. Public key для private
+  1..32 совпадает с OpenSSL fixture; весь ClientHello тоже продолжает совпадать.
+  Live MTProxy/fake TLS не проверены.
 - WEB socket реализует поток и flow-control через WebTransport. Реальный
   web_proxy/Transport + webview вне этой части и требует оконного/браузерного слоя.
 
@@ -185,8 +200,8 @@ OAEP, все варианты ASN.1/Qt IDNA и JSON numerics на экстрем
 |---|---|---|
 | `connection_abstract.cpp` | partial | `connection_abstract.rs` — Clock/Exchange/events/packet helpers/runtime adapter; единая factory для всех backend зависит от partial TLS/WEB/HTTP; этап 2. |
 | `connection_abstract.h` | partial | `connection_abstract.rs` — Clock/Exchange/events/packet helpers/runtime adapter; единая factory для всех backend зависит от partial TLS/WEB/HTTP; этап 2. |
-| `connection_http.cpp` | partial | `connection_http.rs` — Reqwest POST, pending/cancel/probe/http_wait; status с двойным пробелом не принимается; этап 2, нужен upstream/согласованный patch. |
-| `connection_http.h` | partial | `connection_http.rs` — Reqwest POST, pending/cancel/probe/http_wait; status с двойным пробелом не принимается; этап 2, нужен upstream/согласованный patch. |
+| `connection_http.cpp` | partial | `connection_http.rs` — Ручной Tokio HTTP, native Qt POST, duplex tests, live DH; partial: br/zstd/deflate content decoding и все Qt retry/timeout ветви не воспроизведены; этап 2. |
+| `connection_http.h` | partial | `connection_http.rs` — Ручной Tokio HTTP, native Qt POST, duplex tests, live DH; partial: br/zstd/deflate content decoding и все Qt retry/timeout ветви не воспроизведены; этап 2. |
 | `connection_resolving.cpp` | done | `connection_resolving.rs` — IP fallback/deadline/domain changes как actions владельцу; virtual tests, Qt forwarding заменён owner contract. |
 | `connection_resolving.h` | done | `connection_resolving.rs` — IP fallback/deadline/domain changes как actions владельцу; virtual tests, Qt forwarding заменён owner contract. |
 | `connection_tcp.cpp` | done | `connection_tcp.rs` — 0/1/D, prefix/CTR, stream/probe/queues; native fixtures, duplex и live test DC. |
@@ -214,8 +229,8 @@ OAEP, все варианты ASN.1/Qt IDNA и JSON numerics на экстрем
 | `details/mtproto_serialized_request.h` | done | `details/mtproto_serialized_request.rs` — Header/body/padding/ack; RequestStore + handle identity; tests. |
 | `details/mtproto_tcp_socket.cpp` | partial | `details/mtproto_tcp_socket.rs` — Tokio, SOCKS5 и Basic CONNECT; native Qt samples. Digest/NTLM/Negotiate отсутствуют; возврат этап 2 с выбором backend. |
 | `details/mtproto_tcp_socket.h` | partial | `details/mtproto_tcp_socket.rs` — Tokio, SOCKS5 и Basic CONNECT; native Qt samples. Digest/NTLM/Negotiate отсутствуют; возврат этап 2 с выбором backend. |
-| `details/mtproto_tls_socket.cpp` | partial | `details/mtproto_tls_socket.rs` — Native hello и duplex record stream; production X25519 provider и timeout→sync owner integration требуют решения; этап 2. |
-| `details/mtproto_tls_socket.h` | partial | `details/mtproto_tls_socket.rs` — Native hello и duplex record stream; production X25519 provider и timeout→sync owner integration требуют решения; этап 2. |
+| `details/mtproto_tls_socket.cpp` | partial | `details/mtproto_tls_socket.rs` — Native hello/X25519, duplex record stream; timeout→sync owner integration требует сессии; этап 2. |
+| `details/mtproto_tls_socket.h` | partial | `details/mtproto_tls_socket.rs` — Native hello/X25519, duplex record stream; timeout→sync owner integration требует сессии; этап 2. |
 | `details/mtproto_web_proxy_socket.cpp` | partial | `details/mtproto_web_proxy_socket.rs` — Поток/window/Drop через WebTransport; настоящий browser Transport/webview — этап 5. |
 | `details/mtproto_web_proxy_socket.h` | partial | `details/mtproto_web_proxy_socket.rs` — Поток/window/Drop через WebTransport; настоящий browser Transport/webview — этап 5. |
 | `mtproto_auth_key.cpp` | done | `mtproto_auth_key.rs` — Native keyId, v1/v2 оба направления, AES-IGE; CTR в native TCP. |
@@ -238,14 +253,14 @@ OAEP, все варианты ASN.1/Qt IDNA и JSON numerics на экстрем
 | Файл | Возврат | Нужно |
 |---|---|---|
 | connection_abstract.* | 2 | Общая factory после решений по HTTP/TLS/WEB; не обещает подключить любой backend сейчас. |
-| connection_http.* | 2 | Принять malformed status test DC через разрешённый reqwest; договориться о socks support и прокси-клиенте. |
+| connection_http.* | 2 | br/zstd/deflate content decoding, точные Qt idle retry/timeout branches; malformed status и SOCKS/CONNECT уже работают. |
 | details/mtproto_tcp_socket.* | 2 | Согласовать и проверить Digest/NTLM/Negotiate, если они нужны вместо Basic. |
-| details/mtproto_tls_socket.* | 2 | Production X25519 provider; связать deadline owner с SyncTimeRequest. |
+| details/mtproto_tls_socket.* | 2 | Связать deadline owner с SyncTimeRequest; X25519 уже реализован. |
 | details/mtproto_web_proxy_socket.* | 5 | web_proxy/Transport и webview, браузерная сессия/IPC. |
 | details/mtproto_rsa_public_key.* | 2 | Native OAEP vectors и malformed PEM/ASN.1 compatibility. |
 | details/mtproto_dump_to_text.* | 2 | Эталон Qt double formatting на границах. |
 | mtproto_proxy_data.*, mtproto_config.* | 3 | Raw UTF-16 QString, полный IDNA native matrix; значения String с непарным суррогатом сейчас отвергаются. |
-| session*, mtp_instance*, facade*, sender*, config_loader*, special_config_request*, dedicated_file_loader*, proxy_check* | 2, часть 2 | Это не начато; использовать описанные packet/event/key interfaces. |
+| mtp_instance*, facade*, sender*, mtproto_concurrent_sender*, config_loader*, special_config_request*, dedicated_file_loader*, proxy_check* | 2, часть 2 | Это не начато; использовать описанные packet/event/key interfaces. |
 
 Проверенное только чтением явно отмечено выше: часть lifecycle wrappers и ошибок,
 экстремальные ASN.1/IDNA/JSON случаи, некоторые CDN/конфигурационные ветви. Не все
@@ -259,3 +274,146 @@ OAEP, все варианты ASN.1/Qt IDNA и JSON numerics на экстрем
 Негативные счётчики и некорректные UTF-16 поля отвергаются раньше; состояние
 объекта после неудачного чтения повреждённых данных может отличаться от C++.
 Успешные valid-data native сравнения не доказывают равенства всех error paths.
+
+## Автомат сессии без Instance
+
+[Карта функций](docs/session-map.md) содержит 135 строк: 121 определение из .cpp,
+четыре свободных helper, девять inline методов SessionData и Default SessionOptions.
+Все имеют перевод и тест. Нативные образцы затрагивают три строки (шифрование,
+проверка входящего конверта и сравнение msg_key); это не native proof всего автомата.
+
+`Session<C,R>` владеет SessionPrivate и работает как задача Tokio LocalSet:
+`base::Timer`/TimerHost содержат Rc и привязаны к потоку. Снаружи используется
+Send-ручка SessionHandle, команды и снимки SessionData. Для отдельного рабочего
+потока LocalSet и Session создаются внутри него; готовый Session нельзя передавать
+через tokio::spawn. Обработка I/O идёт в независимом исполнителе SessionTransport.
+И Query-состояние, и подготовленные запросы доступны через защищённые данные.
+Все Callback/Update/state/key события проходят общую FIFO, затем tg-runtime
+on_main. Фактические done/fail вызовы выполнит будущий Instance на главном потоке.
+В этой задаче сессия доставляет Response, не разбирает тип ответа API.
+
+Трейт `SessionEnvironment` содержит только зависимости из четырёх исходных файлов:
+
+| C++ источник | Контракт Rust |
+|---|---|
+| `_instance->dcOptions()` (dcType/lookup/keys/hasCDNKeys) | `dc_options() -> DcOptions` — согласованный снимок |
+| `isTestMode`, `isKeysDestroyer` | `is_test_mode`, `is_keys_destroyer` |
+| `deviceModel`, `systemVersion` | `device_model`, `system_version` |
+| `systemLangCode`, `cloudLangCode`, `langPackName` | одноимённые snake_case getters |
+| `Core::App().settings().proxy()` в refreshOptions | `proxy_settings() -> ProxySettings` |
+| `hasCallback(requestId)` | `has_callback` — потокобезопасное чтение |
+| dcTemporaryKeyChanged, dcOptions.changed, cdnConfigChanged | `subscribe() -> UnboundedReceiver<EnvironmentChange>` |
+| processCallback/processUpdate, onStateChange/onSessionReset | `emit(Callback/Update/StateChange/SessionReset)` |
+| dcPersistentKeyChanged/dcTemporaryKeyChanged | `emit(DcPersistentKeyChanged/DcTemporaryKeyChanged)` |
+| syncHttpUnixtime/requestConfig/requestConfigIfOld/requestCDNConfig | соответствующие варианты `InstanceEvent` |
+| restartedByTimeout/badConfigurationError/keyWasPossiblyDestroyed/keyDestroyedOnServer | соответствующие варианты `InstanceEvent` |
+
+Dcenter и общий RequestStore передаются конструктору отдельно, как dc аргумент
+Session и shared SerializedRequest оригинала. Запись ключей остаётся обязанностью
+получателя уведомлений. Экспорт авторизации, смена DC и чтение Config не вызываются
+непосредственно в этих четырёх файлах, поэтому методов для них в трейте нет.
+Будущий Instance подключит свои tg-rpl streams к индивидуальным unbounded каналам
+подписок; замена их ограниченным broadcast с потерей событий недопустима.
+
+`ClientInfo` передаёт фактический api_id, версию/архитектуру/дистрибутив,
+локальный UTC offset и prefer-ipv6 из платформенного/настроечного слоя.
+Default — образец для тестового сервера (17349), не конфигурация будущего входа
+в production. compute_app_version сохраняет алгоритм C++; ОС/KSandbox значения
+приходят от вызывающего кода. При смене timezone/настроек используется команда
+`SessionCommand::ClientInfo` перед переинициализацией. Сдвиг серверного времени
+вычисляется заново для каждого initConnection через SessionClock, не фиксируется
+при старте. `register_options(registry)` регистрирует оригинальный prefer-ipv6
+с теми же name/description/default; его значение включается в ClientInfo.
+
+### Транспорт и таймеры
+
+`SessionTransport::submit(action)` не ждёт I/O и обслуживает Connect/Send/Close/
+TimedOut. `next_event()` возвращает Connected/Packet/ReceivedSome/Error/
+Disconnected/SyncTimeRequest. Оно должно быть безопасно при отмене future.
+Для TCP используются уже разделённые TcpReader/TcpWriter; один writer последовательно
+дописывает кадры до конца, reader принимает данные независимо от очереди отправки.
+HTTP executor использует отдельные outstanding POST и сообщает need_http_wait.
+Обновление fullConnectTimeout при разрешении прокси передаётся ConnectTimeout;
+исходное значение — 4000 * max(resolvedIPs,1), либо 8000 для обычного транспорта.
+Исполнитель реальных соединений подключит будущий Instance: здесь интерфейс
+обязателен к реализации, фиктивного сетевого backend с успешным результатом нет.
+
+Все retry/connect/receive/better/ping/checkSent/container/sender таймеры —
+base::Timer. Источник пробуждения задаётся отдельно через TimerHost::Alarm.
+Для реального времени можно установить ThreadAlarm, будящий Session::wakeup();
+для тестов ManualClock и явный wake/process, без sleep.
+
+```rust,ignore
+let timer_clock = Arc::new(tg_base::timer::SystemClock);
+let host = tg_base::timer::TimerHost::new(timer_clock.clone());
+let (actor, handle) = Session::new(dc_id, dc, environment, requests,
+    SessionParameters { clock: RuntimeClock, random: SystemRandom, host, info });
+let wake = actor.wakeup();
+actor.set_alarm(Rc::new(tg_base::timer::ThreadAlarm::new(timer_clock,
+    move || wake.notify_one())));
+// Внутри LocalSet рабочего потока; main queue исполняется главным потоком.
+tokio::task::spawn_local(actor.run(transport));
+```
+
+### Проверки и особенности оригинала
+
+Сервер в памяти использует настоящий TCP framing/CTR на duplex, собственный RSA,
+самостоятельные MTProto2 и v1 bind key schedules по описанию
+[MTProto](https://core.telegram.org/mtproto/description) и
+[создания ключа](https://core.telegram.org/mtproto/auth_key). Клиентский
+encoder/decrypt/prepare_aes сервером не вызываются: общие только криптопримитивы.
+Проверены permanent+temporary DH, dh_gen_retry, bind с расшифровкой внутреннего
+сообщения, CDN без permanent/bind, разрыв после запроса, повтор, все коды bad_msg,
+bad_server_salt, new_session_created, контейнеры, gzip, msgs_ack, msgs_state_req/
+state_info, msg_resend_req и возврат RPC в главный поток. Остальные проверки
+границ/повреждений/таймеров идут прямо через автомат и независимые серверные байты.
+Нативная входная проверка — 19 случаев из handleReceived до dispatcher; исходящий
+sendSecureRequest снят отдельно. Fixtures, CMake и extract scripts сохранены.
+
+Сохранены особенности:
+
+- notifyConnectionInited сравнивает current с текущими полями, а не переданными
+  опциями; в последовательном исполнении всегда помечает живой DC inited.
+- В LogIdsVector первый ID выводится дважды.
+- Одиночная отправка запроса не ставит checkSentRequests timer; он ставится в
+  контейнерной ветке, как в C++. Receive timeout при этом действует.
+- При выключении обоих address/protocol флагов skip-логика исключает только
+  первый вариант; воспроизведено тестом.
+- Входящие msgs_state_req, msg_resend_req и future_salts не имеют отдельных
+  ветвей в исходном dispatcher: regular DC передаёт их как update, остальные
+  типы DC игнорируют. Новые обработчики сверх оригинала не придуманы.
+- destroy_auth_key отправляет Instance, не SessionPrivate: здесь проверены
+  destroyer mode, -404 и уведомления KeyWasPossiblyDestroyed/KeyDestroyedOnServer.
+
+Отличия: QObject signals/deleteLater заменены командами и владением; общая
+SyncTimeRequestDuration атомарна, тогда как в C++ она читается/пишется из разных
+сессионных потоков без синхронизации. Пустое аутентифицированное тело приводит к
+ParseError/reconnect; C++ после проверок конверта попадает в Expects(from < end).
+Константное сравнение использует RustCrypto ctutils. Время/энтропия/платформенные
+значения передаются явно. Реальные Qt reentrancy, системные события ОС и упаковка
+Mac/Windows не запускались; формат их переданных значений проверен unit tests.
+Живой сервер в этом задании не использовался, help.getConfig и аккаунт не запускались.
+
+Пофайловый статус текущей и следующей задач:
+
+| Файл оригинала | Статус | Сделано / требуется |
+|---|---|---|
+| `session.cpp` | done | Автомат, окружение, base::Timer, проверки; 135 функций в docs/session-map.md. |
+| `session.h` | done | Автомат, окружение, base::Timer, проверки; 135 функций в docs/session-map.md. |
+| `session_private.cpp` | done | Автомат, окружение, base::Timer, проверки; 135 функций в docs/session-map.md. |
+| `session_private.h` | done | Автомат, окружение, base::Timer, проверки; 135 функций в docs/session-map.md. |
+| `mtp_instance.cpp` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `mtp_instance.h` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `facade.cpp` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `facade.h` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `sender.h` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `mtproto_concurrent_sender.cpp` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `mtproto_concurrent_sender.h` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `config_loader.cpp` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `config_loader.h` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `special_config_request.cpp` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `special_config_request.h` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `dedicated_file_loader.cpp` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `dedicated_file_loader.h` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `proxy_check.cpp` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |
+| `proxy_check.h` | todo | Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2. |

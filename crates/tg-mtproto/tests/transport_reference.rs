@@ -142,12 +142,15 @@ async fn tcp_duplex_all_protocols_fragmented_reads() {
             }
         };
         let caller = async move {
-            let mut connection = TcpConnection::new(client, protocol, 10002, Counter(1))
+            let connection = TcpConnection::new(client, protocol, 10002, Counter(1))
                 .await
                 .unwrap();
-            connection.send_data(vec![0, 0, 1, 2, 3]).await.unwrap();
-            assert_eq!(connection.receive().await.unwrap(), vec![9, 8, 7]);
-            assert!(!connection.state.events.is_empty());
+            let (mut reader, mut writer) = connection.into_split();
+            let (sent, received) =
+                tokio::join!(writer.send_data(vec![0, 0, 1, 2, 3]), reader.receive(),);
+            sent.unwrap();
+            assert_eq!(received.unwrap(), vec![9, 8, 7]);
+            assert!(!reader.state.events.is_empty());
         };
         tokio::join!(caller, peer);
     }

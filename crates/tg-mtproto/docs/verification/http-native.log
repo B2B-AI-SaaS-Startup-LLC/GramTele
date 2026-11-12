@@ -1,0 +1,13 @@
+[1/2] Building CXX object CMakeFiles/native_http.dir/home/yarik/Projects/ayugram-rs-wt/mtproto-session/crates/tg-mtproto/tests/reference-tools/http.cpp.o
+[2/2] Linking CXX executable native_http
+mode=sequential connections=1 requests=2 finished=2 errors=0
+mode=concurrent connections=6 requests=8 finished=8 errors=0
+Qt error: Connection closed
+Qt error: Connection closed
+Qt error: Connection closed
+Qt error: Connection closed
+Qt error: Connection closed
+Qt error: Connection closed
+Qt error: Connection closed
+Qt error: Connection closed
+mode=malformed connections=8 requests=8 finished=8 errors=8

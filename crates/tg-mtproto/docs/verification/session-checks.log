@@ -1,0 +1,1137 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/mtproto-session' is dirty
+    Checking tg-base v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-session/crates/tg-base)
+    Checking tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-session/crates/tg-mtproto)
+    Checking tg-codegen v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-session/crates/tg-codegen)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.12s
+   Compiling tg-base v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-session/crates/tg-base)
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-session/crates/tg-mtproto)
+   Compiling tg-codegen v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-session/crates/tg-codegen)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 35.02s
+     Running unittests src/lib.rs (target/debug/deps/ayu_app-a7e79ddfea2dd0a4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/ayu_core-9d770d6ecbcdf0e4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_app-87d3e89dcddbd056)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_app_ui-b45634e22a610aed)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_base-718486d82db3cd84)
+
+running 208 tests
+test algorithm::tests::accumulate ... ok
+test algorithm::tests::reorder_moves_forward_and_backward ... ok
+test algorithm::tests::reorder_index_matches_reorder ... ok
+test algorithm::tests::simplify ... ok
+test algorithm::tests::rounding ... ok
+test assertion::tests::basename ... ok
+test assertion::tests::passing_conditions_do_nothing ... ok
+test algorithm::tests::rounding_nan_fails - should panic ... ok
+test assertion::tests::failing_expects_panics_with_condition - should panic ... ok
+test algorithm::tests::utf8 ... ok
+test assertion::tests::unexpected_diverges - should panic ... ok
+test assertion::tests::unexpected_plain - should panic ... ok
+test base_file_utilities::tests::windows_names ... ok
+test base_file_utilities::tests::sanitizes ... ok
+test algorithm::tests::signs ... ok
+test battery_saving::tests::stored_change_callback_does_not_retain_the_helper ... ok
+test battery_saving::tests::follows_the_helper_on_change_callback ... ok
+test battery_saving::tests::unsupported_is_false_and_unsupported ... ok
+test binary_guard::tests::default_is_not_alive ... ok
+test binary_guard::tests::make_guard_breaks_previous_link ... ok
+test binary_guard::tests::move_keeps_link ... ok
+test binary_guard::tests::partner_drop_kills_both_sides ... ok
+test binary_guard::tests::reset_kills_partner ... ok
+test bytes::tests::compare_orders_by_size_first ... ok
+test bytes::tests::concatenate_parts ... ok
+test binary_guard::tests::works_across_threads ... ok
+test bytes::tests::copy_into_longer_destination ... ok
+test bytes::tests::copy_into_shorter_destination_panics - should panic ... ok
+test bytes::tests::move_overlapping_regions ... ok
+test bytes::tests::set_random_changes_buffer ... ok
+test call_delayed::tests::weak_ptr_and_binary_guard_are_guards ... ok
+test call_delayed::tests::finish_ignores_new_calls_and_destroy_drops_pending ... ok
+test call_delayed::tests::guard_skips_the_call_after_death ... ok
+test call_delayed::tests::runs_once_after_the_delay ... ok
+test concurrent_timer::tests::adjust_after_the_timer_is_gone_is_ignored ... ok
+test concurrent_timer::tests::adjust_of_an_inactive_timer_does_nothing ... ok
+test concurrent_timer::tests::adjust_reschedules_and_marks_the_timer_adjusted ... ok
+test concurrent_timer::tests::call_each_fires_only_once_like_the_original ... ok
+test concurrent_timer::tests::cancel_after_the_method_fired_but_before_the_owner_ran_it ... ok
+test concurrent_timer::tests::cancel_before_the_deadline_prevents_the_call ... ok
+test concurrent_timer::tests::drop_from_the_callback ... ok
+test concurrent_timer::tests::dropping_the_timer_prevents_the_call ... ok
+test concurrent_timer::tests::no_environment_means_an_inert_timer ... ok
+test concurrent_timer::tests::once_runs_on_the_owner_queue_not_on_the_environment ... ok
+test concurrent_timer::tests::restart_from_the_callback ... ok
+test concurrent_timer::tests::restart_replaces_the_pending_method ... ok
+test concurrent_timer::tests::several_timers_fire_in_deadline_order ... ok
+test concurrent_timer::tests::zero_timeout_fires_on_the_next_environment_pass ... ok
+test crash_report_header::tests::header_sample ... ok
+test concurrent_timer::tests::runtime_queue_runner_with_virtual_clock ... ok
+test debug_destroy_informer::tests::drops_wrapped_object ... ok
+test crc32hash::tests::check_value ... ok
+test crc32hash::tests::known_vectors ... ok
+test crc32hash::tests::table_matches_zlib ... ok
+test debug_log::tests::profile_prefix_format ... ok
+test debug_log::tests::debug_is_skipped_when_asked_or_without_integration ... ok
+test enum_mask::tests::set_and_test ... ok
+test file_lock::tests::holder_process ... ok
+test crash_report_header::tests::nul_and_size_limit ... ok
+test file_lock::tests::open_failure ... ok
+test flags::tests::comparisons_are_numeric ... ok
+test debug_log::tests::routes_messages ... ok
+test flags::tests::extended_flags_mixed_with_flags_value ... ok
+test flags::tests::flags_are_hashable_and_ordered ... ok
+test file_lock::tests::same_process_locks_do_not_conflict ... ok
+test flags::tests::not_inverts_all_bits_of_signed_repr ... ok
+test flags::tests::operators_on_extended_flags ... ok
+test flags::tests::operators_on_private_member_enums ... ok
+test flags::tests::operators_on_public_member_enums ... ok
+test flags::tests::operators_on_scoped_enums_non_member ... ok
+test flags::tests::unsigned_repr_wraps_like_cpp ... ok
+test flat_map::tests::bounds_and_positional_erase ... ok
+test flat_map::tests::comparison_operators_compare_pairs ... ok
+test flat_map::tests::construction_from_duplicates_keeps_first ... ok
+test flat_map::tests::copy_constructor_and_assignment ... ok
+test flat_map::tests::custom_comparator ... ok
+test flat_map::tests::descending_comparator_and_float_keys ... ok
+test flat_map::tests::emplace_does_not_overwrite_but_insert_or_assign_does ... ok
+test flat_map::tests::empty_map_edge_cases ... ok
+test flat_map::tests::flat_maps_should_keep_items_sorted_by_key ... ok
+test flat_map::tests::index_operator_inserts_default ... ok
+test flat_map::tests::iter_mut_changes_values_only ... ok
+test flat_map::tests::multi_map_expiring_idiom ... ok
+test flat_map::tests::multi_map_from_unsorted_is_stable ... ok
+test flat_map::tests::multi_map_keeps_insertion_order_of_equal_keys ... ok
+test flat_map::tests::multi_map_removal ... ok
+test flat_map::tests::string_keys_look_up_by_str ... ok
+test flat_map::tests::structured_binding_iteration ... ok
+test flat_map::tests::take_remove_and_erase ... ok
+test flat_map::tests::try_emplace_with_is_lazy ... ok
+test flat_set::tests::construction_dedups ... ok
+test flat_set::tests::descending_and_pairs_ordering ... ok
+test flat_set::tests::empty_set_edge_cases ... ok
+test flat_set::tests::flat_sets_should_keep_items_sorted ... ok
+test flat_set::tests::flat_sets_with_custom_comparators ... ok
+test flat_set::tests::insert_reports_duplicates ... ok
+test flat_set::tests::merge_sorts_and_dedups ... ok
+test flat_set::tests::modify_by_one_step ... ok
+test flat_set::tests::modify_longer_move_is_unsorted_like_original ... ok
+test flat_set::tests::multi_set_semantics ... ok
+test flat_set::tests::remove_erase_and_ranges ... ok
+test flat_set::tests::string_sets_look_up_by_str ... ok
+test index_based_iterator::tests::allows_to_push_back_from_predicate ... ok
+test index_based_iterator::tests::allows_to_push_back_while_removing_all ... ok
+test index_based_iterator::tests::arithmetic_and_comparison ... ok
+test index_based_iterator::tests::comparing_different_containers_fails - should panic ... ok
+
+running 1 test
+test integration::tests::canonical_executable ... test file_lock::tests::holder_process ... ok
+test integration::tests::missing_path_is_empty ... ok
+test last_used_cache::tests::evicts_least_recently_used ... ok
+test last_used_cache::tests::remove_and_clear ... ok
+test last_user_input::tests::platform_source_wins_over_noted_input ... ok
+test network_reachability::tests::instance_is_shared_while_held ... ok
+test network_reachability::tests::starts_available_and_reports_changes ... ok
+test never_freed_pointer::tests::creates_once ... ok
+test never_freed_pointer::tests::deref_of_null_asserts - should panic ... ok
+test openssl_help::tests::bytes_round_trip_is_minimal_big_endian ... ok
+test openssl_help::tests::compare_signed ... ok
+test openssl_help::tests::division ... ok
+test openssl_help::tests::modular_rejects_negative_inputs ... ok
+test openssl_help::tests::signed_add_sub ... ok
+test parse_helper::tests::cursor_helpers ... ok
+test parse_helper::tests::multi_line ... ok
+test parse_helper::tests::no_comments_borrows ... ok
+test parse_helper::tests::single_line ... ok
+test parse_helper::tests::strings_are_kept ... ok
+test openssl_help::tests::raw_rsa_small_key ... ok
+test platform::linux::base_layout_switch_linux::tests::unsupported ... ok
+test platform::linux::base_system_unlock_linux::tests::linux_has_no_unlock ... ok
+test power_save_blocker::tests::shared_request_per_type ... ok
+test openssl_help::tests::non_limb_lengths_and_large_carry ... ok
+test platform::linux::base_file_utilities_linux::tests::directory_symlink_retains_original_failure ... ok
+test openssl_help::tests::modular_known_values ... ok
+test qthelp_url::tests::append_query_or_hash ... ok
+test qthelp_regex::tests::unsupported_constructs_do_not_match ... ok
+test qthelp_url::tests::decode_like_qt ... ok
+test qthelp_url::tests::encode_like_qt ... ok
+test qthelp_url::tests::ipv6 ... ok
+test qthelp_url::tests::parse_params ... ok
+test qthelp_regex::tests::captures_and_offsets ... ok
+test qthelp_regex::tests::literals_in_classes ... ok
+test qthelp_url::tests::protocols ... ok
+test random::tests::buffered_refills ... ok
+test random::tests::index_bounds ... ok
+test random::tests::index_zero_panics - should panic ... ok
+test random::tests::rejection_sampling ... ok
+test random::tests::value_types ... ok
+test runtime_composer::tests::add_get_remove ... ok
+test runtime_composer::tests::bases_are_separate ... ok
+test runtime_composer::tests::re_adding_after_remove_resets_value ... ok
+test screen_reader_state::tests::general_state_follows_the_observer ... ok
+test thread_safe_wrap::tests::wrap_mutates_under_lock ... ok
+test timer::tests::adjust_does_not_touch_one_shot_or_inactive_timers ... ok
+test thread_safe_wrap::tests::queue_across_threads ... ok
+test qthelp_regex::tests::spotify_named_groups ... ok
+test timer::tests::adjust_makes_interval_restart_a_full_period ... ok
+test timer::tests::adjust_flag_set_from_another_thread_is_applied_by_process ... ok
+test timer::tests::alarm_follows_the_earliest_deadline ... ok
+test timer::tests::delayed_call_may_schedule_and_cancel_from_its_callback ... ok
+test timer::tests::cancel_from_own_handler_stops_repetition ... ok
+test timer::tests::default_type_threshold ... ok
+test qthelp_regex::tests::options ... ok
+test timer::tests::delayed_calls_run_once_in_order_and_can_be_cancelled ... ok
+test timer::tests::drop_cancels_and_releases_the_callback ... ok
+test timer::tests::drop_from_own_handler ... ok
+test timer::tests::dropping_another_timer_from_a_handler_prevents_its_fire ... ok
+test timer::tests::dropping_delayed_timer_drops_callbacks_and_slots ... ok
+test timer::tests::dropping_delayed_timer_from_its_callback ... ok
+test timer::tests::each_repeats_on_its_grid_and_skips_missed_periods ... ok
+test timer::tests::fires_in_deadline_then_start_order ... ok
+test timer::tests::main_queue_integration_end_to_end ... ok
+test timer::tests::no_callback_is_fine ... ok
+test timer::tests::remaining_time_semantics ... ok
+test timer::tests::restart_from_own_handler ... ok
+test timer::tests::restarting_replaces_the_previous_schedule ... ok
+test timer::tests::interval_restarted_as_one_shot_from_handler_fires_once_more ... ok
+test timer::tests::once_fires_once_at_the_deadline ... ok
+test timer::tests::set_callback_inside_handler_applies_next_time ... ok
+test timer::tests::timers_started_by_a_handler_wait_for_the_next_process ... ok
+test timer::tests::thread_alarm_wakes_at_the_requested_time_of_its_clock ... ok
+test timer::tests::timer_outliving_its_host_handle_is_safe ... ok
+test timer::tests::zero_interval_fires_once_per_process ... ok
+test timer_rpl::tests::each_emits_until_the_lifetime_ends ... ok
+test timer_rpl::tests::once_emits_then_completes ... ok
+test unixtime::tests::msg_id_formula ... ok
+test unixtime::tests::msg_ids_grow_and_are_multiple_of_four_steps ... ok
+test timer_rpl::tests::unsubscribing_before_the_fire_cancels_the_timer ... ok
+test unixtime::tests::http_shift ... ok
+test unixtime::tests::parse_and_serialize ... ok
+test unixtime::tests::small_shift_is_ignored_until_forced ... ok
+test weak_ptr::tests::cast_keeps_liveness ... ok
+test weak_ptr::tests::clone_of_owner_has_own_flag ... ok
+test weak_ptr::tests::dies_with_owner ... ok
+test weak_ptr::tests::invalidate_kills_old_pointers_only ... ok
+test weak_ptr::tests::checked_from_other_thread ... ok
+test weak_ptr::tests::null_is_not_alive ... ok
+test weak_ptr::tests::std_weak_is_alive ... ok
+test zlib_help::tests::dos_dates ... ok
+test zlib_help::tests::name_comparison ... ok
+test zlib_help::tests::text_detection ... ok
+test weak_ptr::tests::same_object_same_identity ... ok
+test file_lock::tests::other_process_is_killed ... ok
+test qthelp_regex::tests::ascii_digits_without_unicode_properties ... ok
+test qthelp_url::tests::lookbehind_emulation ... ok
+test openssl_help::tests::primality ... ok
+test qthelp_url::tests::validate ... ok
+test platform::linux::base_file_utilities_linux::tests::filesystem_behaviour ... ok
+test qthelp_regex::tests::client_patterns_compile ... ok
+test openssl_help::tests::telegram_dh_prime_is_safe_prime ... ok
+
+test result: ok. 208 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.83s
+
+     Running tests/crypto_vectors.rs (target/debug/deps/crypto_vectors-8090652fb8aa384b)
+
+running 7 tests
+test fips197_aes_all_key_sizes ... ok
+test openssl_ige_published_vector ... ok
+test sp800_38a_aes256_ctr_partial_calls ... ok
+test rfc_hmac ... ok
+test pbkdf2_reference_vectors ... ok
+test fips_sha_abc_and_million_a ... ok
+test wycheproof_pbkdf2_sha512_tc3 ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.75s
+
+     Running tests/invoke_queued.rs (target/debug/deps/invoke_queued-00ef2c0887d3ccc8)
+
+running 1 test
+test queued_calls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/options.rs (target/debug/deps/options-c23ce2764d56ae84)
+
+running 4 tests
+test import_is_atomic_and_resets_missing_options ... ok
+test unchanged_set_does_not_emit_change_event ... ok
+test read_retains_qt_lenient_integer_conversion_and_scope ... ok
+test qt_json_sample_and_delayed_write ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/single_instance.rs (target/debug/deps/single_instance-45da533ba10a5aba)
+
+running 3 tests
+test qt_wire_helper_process ... ok
+test protocol_fixtures ... ok
+
+running 1 test
+test qt_wire_helper_process ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+test primary_and_secondary_exchange_and_cleanup ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/timer_adjust.rs (target/debug/deps/timer_adjust-ae56fd77a8ec013c)
+
+running 1 test
+test adjustment_invalidates_http_and_rearms_on_virtual_time ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/unixtime_updates.rs (target/debug/deps/unixtime_updates-aa5d06461b94df8f)
+
+running 1 test
+test worker_time_update_is_delivered_on_main_and_resets_http ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/zip_reference.rs (target/debug/deps/zip_reference-bc80df3ca5f9e0c0)
+
+running 5 tests
+test limits_crc_and_invalid_archives ... ok
+test inflate_reference_zlib_stream ... ok
+test read_minizip_reference ... ok
+test read_reference_zip_stored_and_deflated ... ok
+test write_zip_headers_and_content ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_cache-6c8d161c10fc52c3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_calls-5c680223a3ca3f05)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_codegen-243ef02d053da629)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/codegen_emoji.rs (target/debug/deps/codegen_emoji-78e69ade5ee72598)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/codegen_lang.rs (target/debug/deps/codegen_lang-1b27c8c9ed594a47)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/codegen_style.rs (target/debug/deps/codegen_style-6cf0a9d86a381f18)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cli.rs (target/debug/deps/cli-6a1099ea584dcd60)
+
+running 1 test
+test original_cli_parameters_two_runs_have_identical_bytes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.84s
+
+     Running tests/formats.rs (target/debug/deps/formats-ff29a4a70234417b)
+
+running 24 tests
+test clean_file_preserves_comment_whitespace_and_crlf ... ok
+test cli_error_messages ... ok
+test comments_inside_strings_and_crlf ... ok
+test ayugram_wide_policy_and_scale_are_emitted ... ok
+test earlier_semantic_error_precedes_later_lexical_error ... ok
+test lang_tags_plural_and_utf16 ... ok
+test lang_expected_errors ... ok
+test packed_utf16_ids ... ok
+test legacy_numeric_tag_expansion ... ok
+test qt_json_preserves_lone_surrogates_and_qstring_key_order ... ok
+test original_plural_at_end_assertion ... ok
+test tokenizer_errors ... ok
+test replacement_words_and_checksums ... ok
+test style_errors_and_cycle ... ok
+test tokenizer_strings_comments_numbers ... ok
+test native_replacement_empty_alias_is_rejected ... ok
+test lone_surrogates_do_not_bypass_ascii_validators ... ok
+test stable_lang_slots_and_holes ... ok
+test palette_exact_checksum_input_and_indices ... ok
+test style_structure_inheritance_arithmetic ... ok
+test emoji_errors ... ok
+test style_duplicate_and_unknown_field ... ok
+test native_qt_json_diagnostics_and_unknown_escapes ... ok
+test qt_json_nesting_limit_matches_qt ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/original_reference.rs (target/debug/deps/original_reference-b6c184c9b1eaa879)
+
+running 5 tests
+test original_historical_alias_map_postfix_required_and_emoticons ... ok
+test original_palette_every_color_index_fallback_and_checksum ... ok
+test original_emoji_ids_flags_variation_parents_sections_and_suggestions ... ok
+test original_lang_all_utf16_values_offsets_tag_and_key_order ... ok
+test original_all_style_structs_fields_values_copies_and_inheritance ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.80s
+
+     Running tests/real_inputs.rs (target/debug/deps/real_inputs-ff23bb0fa629c127)
+
+running 3 tests
+test real_emoji ... ok
+test real_lang ... ok
+test real_styles has been running for over 60 seconds
+test real_styles ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 63.72s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_core-660e07698396dd37)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_e2e-6fc94ec0544a5430)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_editor-b405a9c13a1678a3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_export-6ee645613f29a78b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_iv-f32bdb1229227c38)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_lottie-2c569b879edbd54d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_media-eba474b8e9ee7199)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_mtproto-945f21b5259acb4d)
+
+running 23 tests
+test details::mtproto_dc_key_creator::tests::dh_fail_nonce ... ok
+test details::mtproto_dc_key_creator::tests::dh_fail_valid_hash ... ok
+test details::mtproto_dc_key_creator::tests::gen_fail_valid_hash ... ok
+test details::mtproto_dc_key_creator::tests::dh_prime_rejection ... ok
+test details::mtproto_dc_key_creator::tests::dh_cannot_decrypt ... ok
+test details::mtproto_dc_key_creator::tests::gen_retry_limit ... ok
+test details::mtproto_dc_key_creator::tests::gen_wrong_nonces ... ok
+test details::mtproto_dc_key_creator::tests::dh_fail_hash ... ok
+test details::mtproto_dc_key_creator::tests::malformed_tl_is_terminal ... ok
+test details::mtproto_dc_key_creator::tests::dh_ok_outer_nonce ... ok
+test details::mtproto_dc_key_creator::tests::dh_inner_hash ... ok
+test details::mtproto_dc_key_creator::tests::pq_factor_bytes_match_original_padding ... ok
+test details::mtproto_dc_key_creator::tests::dh_bad_encrypted_length ... ok
+test details::mtproto_dc_key_creator::tests::gen_wrong_hashes ... ok
+test details::mtproto_dc_key_creator::tests::pq_wrong_nonce ... ok
+test details::mtproto_dc_key_creator::tests::dh_inner_nonce ... ok
+test details::mtproto_dc_key_creator::tests::start_twice ... ok
+test details::mtproto_dc_key_creator::tests::rsa_pad_too_large ... ok
+test details::mtproto_dc_key_creator::tests::unexpected_stage ... ok
+test details::mtproto_dc_key_creator::tests::unknown_public_key ... ok
+test details::mtproto_received_ids_manager::tests::window ... ok
+test details::mtproto_dc_key_creator::tests::dh_bad_ga ... ok
+test mtproto_dh_utils::tests::prime_and_bounds ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.04s
+
+     Running tests/crypto_reference.rs (target/debug/deps/crypto_reference-b3eb1023e9a02e6c)
+
+running 4 tests
+test original_aes_ige_encrypt_and_decrypt ... ok
+test original_config_every_field_nondefault_and_utf16 ... ok
+test original_dc_options_and_config_serialization ... ok
+test original_auth_key_schedules_key_id_and_rsa ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/dump_core.rs (target/debug/deps/dump_core-39e713c460ab2092)
+
+running 2 tests
+test primitives_vectors_and_layers ... ok
+test gzip_reference_stream_crc_and_limits ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/handshake_memory.rs (target/debug/deps/handshake_memory-8288a2b82c614637)
+
+running 1 test
+test memory_server_rsa_pad_dh_success_and_retry ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.45s
+
+     Running tests/http_transport.rs (target/debug/deps/http_transport-889b74b46094ddc5)
+
+running 5 tests
+test post_matches_qt_capture ... ok
+test rejects_conflicting_lengths_truncation_and_oversize ... ok
+test disconnect_cancels_pending_response ... ok
+test status_spacing_chunking_interim_and_eof ... ok
+test keep_alive_two_requests_and_disconnect ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/live_test_dc.rs (target/debug/deps/live_test_dc-bcd720f1fdc64060)
+
+running 2 tests
+test authorization_key_test_dc_http ... ignored, manual, test Telegram DC only: HTTP unauthenticated DH
+test authorization_key_test_dc_tcp ... ignored, manual, test Telegram DC only: TCP unauthenticated DH
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/proxy_reference.rs (target/debug/deps/proxy_reference-7c240e1dfa521e40)
+
+running 6 tests
+test native_proxy_records_preserve_null_qstrings ... ok
+test native_qt_socks5_and_connect ... ok
+test proxy_links_secrets_and_serialized_records ... ok
+test memory_socks5_auth_and_rejection ... ok
+test memory_connect_basic_challenge ... ok
+test original_web_proxy_embedded_assertions ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/session_envelope.rs (target/debug/deps/session_envelope-f4a07dc17465f58e)
+
+running 4 tests
+test original_send_secure_request_with_fixed_entropy ... ok
+test original_auth_key_incoming_direction_and_tcp_padding ... ok
+test tampered_key_id_digest_ciphertext_and_session_are_rejected ... ok
+test authenticated_invalid_lengths_padding_and_msg_ids ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/state_and_storage.rs (target/debug/deps/state_and_storage-b4a553141363c79b)
+
+running 11 tests
+test binding_request_decrypts_to_original_inner_layout ... ok
+test request_identity_is_shared_by_handles ... ok
+test dns_virtual_stagger_cache_and_combined_result ... ok
+test dns_json_type_filter_and_ttl ... ok
+test resolver_virtual_deadlines_and_ip_changes ... ok
+test serialized_request_header_and_padding ... ok
+test endpoint_filtering_duplicate_policy_and_persisted_limits ... ok
+test web_socket_stream_window_and_drop ... ok
+test concurrent_key_creation_has_one_owner ... ok
+test error_response_qt_regex_and_local_values ... ok
+test config_legacy_suffixes_and_malformed_inputs ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/tls_reference.rs (target/debug/deps/tls_reference-d5417e76daf9762f)
+
+running 5 tests
+test server_hello_fragmentation_and_hmac_rejection ... ok
+test original_client_hello_all_greases_extensions_lengths_and_hmac ... ok
+test x25519_public_key_matches_original_openssl_keygen ... ok
+test tls_adapter_on_duplex_stream ... ok
+test record_chunks_and_every_byte_fragment ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/transport_reference.rs (target/debug/deps/transport_reference-c2e5fbf98fbdf67c)
+
+running 4 tests
+test forbidden_first_bytes_and_zero_second_word ... ok
+test framing_boundaries_and_fragment_headers ... ok
+test original_obfuscated_headers_and_first_frames ... ok
+test tcp_duplex_all_protocols_fragmented_reads ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_platform-94e353e2347a03aa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_qr-73ac0ec6a6080208)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_rpl-31eb907b2eb934fe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/destruction_order_tests.rs (target/debug/deps/destruction_order_tests-1a386cf93f07b4f5)
+
+running 11 tests
+test lifetime_runs_callbacks_in_reverse_order ... ok
+test callbacks_added_during_destroy_run_later ... ok
+test add_lifetime_to_terminated_consumer_destroys_it_at_once ... ok
+test make_state_is_dropped_in_order_with_other_callbacks ... ok
+test event_stream_drop_sends_done_in_subscription_order ... ok
+test single_value_is_dropped_with_the_subscription ... ok
+test termination_drops_handlers_and_their_captures ... ok
+test variable_drop_order_matches_cpp_members ... ok
+test release_forgets_callbacks ... ok
+test done_runs_before_consumer_lifetime_is_destroyed ... ok
+test moved_assignment_destroys_old_lifetime ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/extra_operators_tests.rs (target/debug/deps/extra_operators_tests-a4aa06e4e27ab669)
+
+running 16 tests
+test before_next_runs_before_the_handler ... ok
+test combine_waits_for_all_and_completes_after_all ... ok
+test default_producer_is_empty_and_never_emits ... ok
+test error_is_forwarded_through_operators ... ok
+test conditional_switches_sources ... ok
+test duplicate_restarts_and_copies_the_generator ... ok
+test flatten_latest_unsubscribes_previous_inner ... ok
+test map_error_and_map_error_to_done ... ok
+test pipe_applies_application_operator ... ok
+test filter_optional_and_nullptr ... ok
+test merge_passes_values_and_completes_after_all ... ok
+test filter_producer_gates_values ... ok
+test start_to_stream_forwards_values_but_not_done ... ok
+test start_spawning_replays_initial_values_then_follows ... ok
+test take_while_completes_on_first_failure ... ok
+test take_zero_completes_on_first_value ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/operators_tests.rs (target/debug/deps/operators_tests-51d4a2d80fb3b37b)
+
+running 15 tests
+test after_next_test ... ok
+test deferred_test ... ok
+test combine_previous_test ... ok
+test filter_tuple_test ... ok
+test filter_test ... ok
+test combine_test ... ok
+test combine_vector_test ... ok
+test distinct_until_changed_test ... ok
+test mappers_test ... ok
+test flatten_latest_test ... ok
+test single_test ... ok
+test map_test ... ok
+test skip_test ... ok
+test take_test ... ok
+test then_test ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/producer_tests.rs (target/debug/deps/producer_tests-acb3b796a2610c44)
+
+running 12 tests
+test event_stream_add_and_remove_in_handler_test ... ok
+test event_stream_add_in_handler_test ... ok
+test nested_lifetimes_test ... ok
+test event_stream_move_test ... ok
+test event_stream_ends_before_handler_lifetime ... ok
+test event_stream_basic_test ... ok
+test on_next_should_copy_its_callback ... ok
+test on_star ... ok
+test producer_error_test ... ok
+test producer_next_done_and_lifetime_end_test ... ok
+test nested_producers_test ... ok
+test tuple_producer_test ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/reentrancy_tests.rs (target/debug/deps/reentrancy_tests-583dc02e15a6790a)
+
+running 11 tests
+test combine_previous_reentrant_order_matches_original ... ok
+test destroy_own_lifetime_keeps_handler_state_alive ... ok
+test fire_done_from_handler_then_resubscribe ... ok
+test nested_fire_with_new_consumer_duplicates_it_and_loses_firing_one_like_original ... ok
+test fire_from_handler_is_delivered_depth_first ... ok
+test nested_fire_with_stale_consumer_loses_live_consumer_like_original ... ok
+test subscribe_during_fire_gets_only_later_values ... ok
+test stream_dropped_from_handler ... ok
+test unsubscribe_other_during_fire_stops_delivery_at_once ... ok
+test unsubscribe_self_during_fire ... ok
+test variable_assigned_from_its_own_value_handler ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/variable_tests.rs (target/debug/deps/variable_tests-09060b9f24e93670)
+
+running 9 tests
+test changes_skip_current ... ok
+test clone_copies_value_only ... ok
+test drop_completes_subscribers ... ok
+test non_comparable_fires_every_time ... ok
+test producer_assignment_follows_and_set_stops_it ... ok
+test reset_with_error_sends_error ... ok
+test reset_sends_done_without_value ... ok
+test simple_test ... ok
+test value_copies_current_at_call_time ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_runtime-05c6b850824e1acd)
+
+running 5 tests
+test crl_semaphore::tests::release_saturates ... ok
+test crl_time::tests::no_adjustment_when_clocks_agree ... ok
+test crl_time::tests::overflow_is_refused ... ok
+test crl_time::tests::sleep_is_compensated ... ok
+test crl_time::tests::wall_clock_going_back_is_ignored ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/guards.rs (target/debug/deps/guards-e424e83c2bad1f6a)
+
+running 7 tests
+test guard_runs_while_alive_and_skips_when_destroyed ... ok
+test guard_variants_with_args_and_rc ... ok
+test guardian_guards_die_with_the_object ... ok
+test on_main_guarded_skips_dead_object_at_run_time ... ok
+test main_ref_reaches_a_non_send_object_from_a_background_thread ... ok
+test main_ref_to_destroyed_object_does_not_run ... ok
+test main_ref_registry_survives_many_dead_entries ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main_loop.rs (target/debug/deps/main_loop-538ca92f78e492e8)
+
+running 3 tests
+test quit_before_run_returns_after_first_pass ... ok
+test tasks_posted_by_tasks_are_run_by_the_loop ... ok
+test background_work_comes_back_on_the_loop_thread ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/main_queue.rs (target/debug/deps/main_queue-d8e52f5c58652212)
+
+running 14 tests
+test panic_in_task_does_not_lose_the_rest ... ok
+test reentrant_process_sees_only_newer_tasks ... ok
+test shutdown_drops_pending_unexecuted_and_ignores_later_posts ... ok
+test local_tasks_keep_global_order_and_need_not_be_send ... ok
+test shutdown_from_inside_a_task_drops_the_rest_of_the_batch ... ok
+test post_sync_on_main_thread_panics_instead_of_deadlocking ... ok
+test post_is_deferred_even_on_main_thread_and_fifo ... ok
+test posts_before_waker_registration_are_delivered ... ok
+test post_sync_from_other_thread_returns_value ... ok
+test waker_not_called_while_already_scheduled ... ok
+test tasks_posted_while_processing_wait_for_next_process ... ok
+test wrapper_surrounds_each_batch ... ok
+test update_requests_subscription ... ok
+test per_thread_order_is_kept_across_threads ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/object_on_queue.rs (target/debug/deps/object_on_queue-dc8848ffd89d9124)
+
+running 9 tests
+test object_on_thread_is_destroyed_on_its_thread ... ok
+test object_on_thread_always_uses_its_own_thread ... ok
+test destroyed_after_pending_tasks_and_off_the_caller_thread ... ok
+test runner_runs_on_the_queue ... ok
+test constructed_on_the_queue_not_on_the_caller ... ok
+test weak_with_after_destruction_is_a_noop ... ok
+test destroy_moves_a_value_to_the_queue ... ok
+test constructor_with_weak_handle ... ok
+test calls_arrive_in_order_one_at_a_time ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/on_main_queue.rs (target/debug/deps/on_main_queue-385e3f5dfb9800d2)
+
+running 3 tests
+test local_steps_need_not_be_send ... ok
+test dead_guard_abandons_the_remaining_steps ... ok
+test steps_run_one_per_turn_in_order ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/queue.rs (target/debug/deps/queue-f44d0f8d775b5169)
+
+running 8 tests
+test sync_waits_for_earlier_tasks_and_returns_value ... ok
+test executor_shutdown_drops_pending_queue_tasks ... ok
+test sync_from_same_queue_panics_instead_of_deadlocking ... ok
+test panic_in_task_does_not_wedge_the_queue ... ok
+test sync_propagates_panic_to_caller ... ok
+test global_async_and_sync ... ok
+test tasks_run_in_order_and_never_overlap ... ok
+test enqueueing_from_many_threads_keeps_per_thread_order ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/semaphore.rs (target/debug/deps/semaphore-0ad815543419bd51)
+
+running 3 tests
+test release_before_acquire_does_not_block ... ok
+test double_release_is_saturating ... ok
+test ping_pong_between_threads ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/time.rs (target/debug/deps/time-3730531e3b6300ba)
+
+running 4 tests
+test adjust_time_is_false_without_sleep ... ok
+test time_is_i64_milliseconds_from_small_origin ... ok
+test profile_is_microseconds_of_the_same_clock ... ok
+test now_is_monotonic_on_every_thread_and_across_handoffs ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_scheme-687b7917b956797b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/all_definitions.rs (target/debug/deps/all_definitions-89895e045d3d9345)
+
+running 1 test
+test every_constructor_and_method_reads_reference_fields ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/dump_to_text.rs (target/debug/deps/dump_to_text-b67a2843889a1c30)
+
+running 5 tests
+test dataless_constructor ... ok
+test absent_conditionals_and_true_flag ... ok
+test integer_field_and_trailing_separator ... ok
+test nested_generic_request_indentation ... ok
+test unknown_and_truncated_input ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/native_tl.rs (target/debug/deps/native_tl-c8a311a5137ef34e)
+
+running 2 tests
+test builtin_vector_matches_native_cpp ... ok
+test every_definition_matches_native_cpp ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+     Running tests/reference_bytes.rs (target/debug/deps/reference_bytes-fba0c531b206970c)
+
+running 37 tests
+test ayugram_noforwards_hook ... ok
+test bare_constructor_items ... ok
+test boxed_vectors ... ok
+test conditional_bool_fields ... ok
+test bare_vector ... ok
+test conditional_flag_decides_not_the_value ... ok
+test conditional_all_flag_combinations ... ok
+test bool_boxed ... ok
+test constructor_with_longs ... ok
+test constructors_without_fields ... ok
+test defaults ... ok
+test conditional_three_fields_all_combinations ... ok
+test double ... ok
+test flag_inheritance ... ok
+test int ... ok
+test flags2_is_the_high_word ... ok
+test int128_int256 ... ok
+test long ... ok
+test match_on_constructors ... ok
+test method_name_collision_exception ... ok
+test method_returning_vector ... ok
+test method_with_parameters ... ok
+test method_without_parameters_and_generic_wrapper ... ok
+test mtproto_rpc_error ... ok
+test nested_boxed ... ok
+test short_strings ... ok
+test single_dataless_constructor_accepts_any_id ... ok
+test string_253_is_last_short_form ... ok
+test string_254_is_first_long_form ... ok
+test string_255_and_256 ... ok
+test string_read_quirks ... ok
+test truncated_constructor_is_an_error ... ok
+test unknown_constructor_is_an_error ... ok
+test utf8_text ... ok
+test vector_errors ... ok
+test vector_of_vectors ... ok
+test string_long_lengths ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/scheme_ids.rs (target/debug/deps/scheme_ids-a3aabf17183953e5)
+
+running 3 tests
+test every_explicit_id_matches_its_crc ... ok
+test every_definition_is_generated ... ok
+test name_mapping_is_unambiguous ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_spellcheck-86522a0ed9fb11c9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_tl-8940b25f1793f475)
+
+running 4 tests
+test flags::tests::bit_operations ... ok
+test tl::tl_basic_types::tests::conditional_values ... ok
+test tl::tl_basic_types::tests::get_bytes_checks_bounds ... ok
+test tl::tl_basic_types::tests::put_bytes_pads_with_zeros ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_tl_gen-74313b5a23307571)
+
+running 9 tests
+test generate_tl::tests::known_ids ... ok
+test generate_tl::tests::clean_line_rules ... ok
+test names::tests::pascal_case ... ok
+test names::tests::snake_case ... ok
+test generate_tl::tests::param_regex ... ok
+test generate_tl::tests::name_type_regex ... ok
+test names::tests::fields ... ok
+test generate_tl::tests::qp_decoding ... ok
+test generate_tl::tests::comment_filters ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_tools-1ac25a0391088d8e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_ui-f7d68ffd6e211673)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_webrtc-bb1568f371917760)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tg_webview-82daca1c0cfdb1a3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ayu_app
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ayu_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_app
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_app_ui
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_base
+
+running 1 test
+test crates/tg-base/src/flags.rs - flags (line 8) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+   Doc-tests tg_cache
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_calls
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_codegen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_e2e
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_editor
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_export
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_iv
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_lottie
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_media
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_mtproto
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_platform
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_qr
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_rpl
+
+running 4 tests
+test crates/tg-rpl/src/lib.rs - (line 54) - compile fail ... ok
+test crates/tg-rpl/src/lib.rs - (line 50) - compile fail ... ok
+test crates/tg-rpl/src/lib.rs - (line 46) - compile fail ... ok
+test crates/tg-rpl/src/lib.rs - (line 42) - compile fail ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+   Doc-tests tg_runtime
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_scheme
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_spellcheck
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_tl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_tl_gen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_tools
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_ui
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_webrtc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tg_webview
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

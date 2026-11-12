@@ -73,6 +73,11 @@
     "reference-tools/extract_tls.py": "96dedb40db38892e57e5710fad830c6158408dc7009e2746c0a3a433b2a5461c",
     "reference-tools/prefix.hpp": "c5bb5a47a230a23333eb518c45c1ec8facb9c2cceea12b76fa3835ebc570589a",
     "reference-tools/proxy.cpp": "0dd0530eb3b64cf8604771bc2509cbf1707ae852a9b930490b5ecc9ff00133c8",
-    "reference-tools/socks.cpp": "faa3a9e778131a7d6055eb290bb7efcb89aebba1c010b9b9eb3ce7ded11a8514"
+    "reference-tools/socks.cpp": "faa3a9e778131a7d6055eb290bb7efcb89aebba1c010b9b9eb3ce7ded11a8514",
+    "http-post.bin": "bd8bb640928599674e7df8b44a6349b6edc12ee478aa372791f1c5b0955e6ec1",
+    "session-envelope.bin": "bec5931787c4233ce2698e3c133fbda7db219a4fd79f5cfaea1022cf3fdd2f0d",
+    "original/SourceFiles/mtproto/session_private.cpp": "895cba17c3c40f01e14b9b831e33335ca748edbd868dfb4178dc38d6d981c2b8",
+    "session-receive.bin": "94be05a9a68a877a64167fbabf653f0704b92376806be2b0be830071f8af3626",
+    "test-server-rsa.pub": "7b3cc3d9dbc36ba3ed058ba7fdcad539d11032118bc2534c5edd8057f49404af"
   }
 }

@@ -54,8 +54,7 @@ async fn authorization_key_test_dc_tcp() {
 #[ignore = "manual, test Telegram DC only: HTTP unauthenticated DH"]
 async fn authorization_key_test_dc_http() {
     let result = tokio::time::timeout(std::time::Duration::from_secs(40), async {
-        let client = reqwest::Client::builder().no_proxy().build()?;
-        let mut connection = HttpConnection::new(client, TEST_DC_2);
+        let mut connection = HttpConnection::new(TEST_DC_2, Default::default());
         let keys = DcOptions::new(Environment::Test).public_keys(2);
         let (key, _) = create_key(
             &mut connection,

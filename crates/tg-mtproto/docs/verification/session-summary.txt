@@ -1,0 +1,11 @@
+Rust: 1.95.0 (pinned nix develop)
+Command: nix develop --command bash -euc 'cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace'
+cargo fmt --check: exit 0
+cargo clippy --workspace --all-targets -- -D warnings: exit 0
+cargo test --workspace: exit 0; 525 passed, 0 failed, 2 ignored
+Live: cargo test -p tg-mtproto --test live_test_dc -- --ignored --nocapture
+exit 0; 2 passed (test DC 2 TCP443 and HTTP80), no API calls
+Instance help.getConfig TCP/HTTP: NOT IMPLEMENTED, NOT RUN
+Full session in-memory scenario server: NOT IMPLEMENTED
+Native simple config decrypt: NOT CAPTURED
+Task remains incomplete; branch is not merged into main.

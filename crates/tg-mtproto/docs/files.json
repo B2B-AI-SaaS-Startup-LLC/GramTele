@@ -177,13 +177,13 @@
     "path": "SourceFiles/mtproto/details/mtproto_tls_socket.h",
     "status": "partial",
     "module": "crates/tg-mtproto/src/details/mtproto_tls_socket.rs",
-    "note": "Native hello и duplex record stream; production X25519 provider и timeout→sync owner integration требуют решения; этап 2."
+    "note": "Native hello/X25519, duplex record stream; timeout→sync owner integration требует сессии; этап 2."
   },
   {
     "path": "SourceFiles/mtproto/details/mtproto_tls_socket.cpp",
     "status": "partial",
     "module": "crates/tg-mtproto/src/details/mtproto_tls_socket.rs",
-    "note": "Native hello и duplex record stream; production X25519 provider и timeout→sync owner integration требуют решения; этап 2."
+    "note": "Native hello/X25519, duplex record stream; timeout→sync owner integration требует сессии; этап 2."
   },
   {
     "path": "SourceFiles/mtproto/details/mtproto_web_proxy_socket.h",
@@ -237,13 +237,13 @@
     "path": "SourceFiles/mtproto/connection_http.h",
     "status": "partial",
     "module": "crates/tg-mtproto/src/connection_http.rs",
-    "note": "Reqwest POST, pending/cancel/probe/http_wait; status с двойным пробелом не принимается; этап 2, нужен upstream/согласованный patch."
+    "note": "Ручной Tokio HTTP, native Qt POST, duplex tests, live DH; partial: br/zstd/deflate content decoding и все Qt retry/timeout ветви не воспроизведены; этап 2."
   },
   {
     "path": "SourceFiles/mtproto/connection_http.cpp",
     "status": "partial",
     "module": "crates/tg-mtproto/src/connection_http.rs",
-    "note": "Reqwest POST, pending/cancel/probe/http_wait; status с двойным пробелом не принимается; этап 2, нужен upstream/согласованный patch."
+    "note": "Ручной Tokio HTTP, native Qt POST, duplex tests, live DH; partial: br/zstd/deflate content decoding и все Qt retry/timeout ветви не воспроизведены; этап 2."
   },
   {
     "path": "SourceFiles/mtproto/connection_resolving.h",
@@ -292,5 +292,119 @@
     "status": "partial",
     "module": "crates/tg-mtproto/src/mtproto_config.rs",
     "note": "Native все поля/default/custom/UTF16/null, apply/legacy tails; непарные UTF-16 требуют raw QString на этапе 3."
+  },
+  {
+    "path": "SourceFiles/mtproto/session.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/session.rs",
+    "note": "Автомат, окружение и виртуальные base::Timer; 135 функций в docs/session-map.md, независимый duplex server и native envelope."
+  },
+  {
+    "path": "SourceFiles/mtproto/session.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/session.rs",
+    "note": "Автомат, окружение и виртуальные base::Timer; 135 функций в docs/session-map.md, независимый duplex server и native envelope."
+  },
+  {
+    "path": "SourceFiles/mtproto/session_private.cpp",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/session_private.rs",
+    "note": "Автомат, окружение и виртуальные base::Timer; 135 функций в docs/session-map.md, независимый duplex server и native envelope."
+  },
+  {
+    "path": "SourceFiles/mtproto/session_private.h",
+    "status": "done",
+    "module": "crates/tg-mtproto/src/session_private.rs",
+    "note": "Автомат, окружение и виртуальные base::Timer; 135 функций в docs/session-map.md, независимый duplex server и native envelope."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtp_instance.cpp",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtp_instance.h",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/facade.cpp",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/facade.h",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/sender.h",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_concurrent_sender.cpp",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/mtproto_concurrent_sender.h",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/config_loader.cpp",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/config_loader.h",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/special_config_request.cpp",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/special_config_request.h",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/dedicated_file_loader.cpp",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/dedicated_file_loader.h",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/proxy_check.cpp",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
+  },
+  {
+    "path": "SourceFiles/mtproto/proxy_check.h",
+    "status": "todo",
+    "module": "",
+    "note": "Реализация ещё не начата; требуется перенос по функциям и интеграция с сессией/Instance, этап 2."
   }
 ]

@@ -673,6 +673,13 @@ pub fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
+/// Compares authenticated message digests without early exit on differing bytes.
+/// Length is public; equal-length byte comparison uses the existing RustCrypto backend.
+pub fn const_time_equal(a: &[u8], b: &[u8]) -> bool {
+    use crypto_bigint::ctutils::CtEq;
+    bool::from(a.ct_eq(b))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -555,3 +555,94 @@ validate_secret допускает секреты, которые собстве
 строк/PEM, ограниченный logging gzip и double formatting, owner/events вместо Qt
 reentrancy. Часть 1 целиком не объявлена готовой, сессия на этом слиянии не начата.
 Cargo.lock не добавлен, push не выполнялся; stash base-crypto сохранён.
+
+## Этап 2, часть 2: промежуточная фиксация HTTP/X25519 и конверта сессии
+
+Работа **не завершена**. Main содержит восстановленный учёт прошлого задания
+(14d0007, `ledger: native TL reference and MTProto transport`). Удалены старый
+mtproto-transport worktree и влитая ветка. Stash `base-crypto before integrating
+main` сохранён. Новая ветка `port/tg-mtproto-session` в worktree
+`/home/yarik/Projects/ayugram-rs-wt/mtproto-session` создана от этого main.
+Текущая незавершённая часть не влита в main.
+
+**Пункт 2:** reqwest для MTProto HTTP заменён ручным POST поверх Tokio byte stream;
+NetworkConnector вызывает тот же connect_to_host/SOCKS5/Basic CONNECT, что TCP.
+reqwest остаётся только в DoH. Исключение к таблице замен записано в PLAN.md.
+Реализованы tolerant status, Content-Length, chunked/trailers/interim response,
+EOF framing, pool шести соединений без pipelining, keep-alive, pending/http_wait,
+отмена outstanding requests. Заголовки/тело совпали с нативным Qt capture.
+В fake TLS добавлен настоящий X25519 через отдельно разрешённый x25519-dalek
+2.0.1; fixed private 1..32 даёт ту же точку, что OpenSSL. Старый ClientHello
+fixture со всеми полями продолжает совпадать. Digest/NTLM/Negotiate, raw UTF-16
+и web-proxy не изменены.
+
+**Эталоном оригинала:** QNetworkAccessManager с настройками из connection_http.cpp
+на Qt 6.11.2: sequential=1 connection/2 requests; concurrent=6/8; malformed
+HTTP/1.0 с двойным пробелом=8 ошибок Connection closed. Это отдельный Qt harness,
+не запуск целого клиента и не доказательство поведения иной версии Qt.
+Извлечённый без изменения алгоритма sendSecureRequest/prepareSecurePacket
+выполняется с оригинальными SerializedRequest/SHA256/AuthKey/AES-IGE, fixed
+entropy/time, отключёнными logs и заменённым network sink. Исходящий packet
+совпал; входящий sample проверяет оригинальный prepareAES(false), не выполнение
+handleReceived целиком. Стенды/fixtures/manifest сохранены в tests/reference-tools.
+
+**Своими тестами:** HTTP на duplex, keep-alive, cancel, double-space status,
+chunked/interim/EOF, повреждённые headers/lengths; X25519/native hello;
+MTProto2 конверт с проверками auth_key_id/msg_key/session/length/padding/msg_id
+и bad_time, повреждение каждого слова, независимое server-side построение
+AES/SHA конверта. TcpConnection::into_split переносит CTR state/частичный frame/
+очереди/header, send и receive одновременно проверены для TCP 0/1/D.
+Это ещё **не** сценарный сервер полной сессии из задания.
+
+**Живым сервером:** только DH test DC 2 149.154.167.40 (TCP443/HTTP80), оба
+успешны. API-запросов/аккаунта/production не было. Пример Instance help.getConfig
+ещё отсутствует, getConfig по TCP/HTTP не запускался.
+
+**Только чтением / ограничения:** http_wait соответствует пустоте outstanding
+set. Различия Qt idle reconnect/retry/timeout, иные locale/build headers ещё
+не установлены запуском; identity/gzip supported, br/zstd/deflate HTTP content
+encoding явно отвергаются (другие backend без разрешения не добавлялись).
+Прокси/fake TLS живьём не проверены. Нативное decryptSimpleConfig не снято.
+В прочитанном ConcurrentSender::senderRequestCancelAll vector сначала создаётся
+с size=N, затем в него push_back N id: появляются N нулевых id; этот файл ещё
+не портирован, эффект подтверждён только чтением, не отдельным запуском.
+Grep AyuGram/ayu в 19 файлах этой части совпадений не дал.
+
+Rust 1.95.0: `cargo fmt --check` exit 0;
+`cargo clippy --workspace --all-targets -- -D warnings` exit 0;
+`cargo test --workspace` exit 0: **525 passed, 0 failed, 2 ignored**.
+В tg-mtproto 65 обычных тестов; 10 новых, существующий duplex TCP переведён
+на одновременные split send/receive. Полный вывод текущих проверок и DH:
+`crates/tg-mtproto/docs/verification/session-checks.log`, `session-http.log`.
+Новая прямая зависимость только x25519-dalek 2.0.1; const_time_equal в tg-base
+использует уже имеющийся RustCrypto crypto-bigint::ctutils. tg-runtime/tg-rpl
+не менялись. Cargo.lock не добавлен, push не выполнялся.
+
+**Оставшаяся часть 2, по файлам (та же таблица в README и ledger):**
+
+- session_private.cpp → partial → перенесён только зашифрованный конверт;
+  требуется автомат, containers/ack/state/resend/bad_msg/salts/ping/gzip,
+  выбор соединений, backoff, временные ключи/bind/PFS/CDN/destroy и base::Timer.
+- session_private.h → partial → интерфейс конверта; полный SessionPrivate ещё нет.
+- session.cpp → todo → владелец SessionData, задача Tokio, отправка/возврат main queue.
+- session.h → todo → Session/SessionData/SessionOptions и совместимый интерфейс.
+- mtp_instance.cpp → todo → DC/sessions/keys, migrate/export/import, delayed retries,
+  FLOOD_WAIT, invokeAfter/initConnection/layer, cancellation/events и config loading.
+- mtp_instance.h → todo → публичный Instance и формат keys-for-write для этапа 3.
+- facade.cpp → todo → pause/unpause events через tg-rpl.
+- facade.h → todo → shifted DC helpers и facade.
+- sender.h → todo → типизированный request/done/fail/send, короткие вызовы.
+- mtproto_concurrent_sender.cpp → todo → main dispatch/cancel/handler ownership.
+- mtproto_concurrent_sender.h → todo → типизированный concurrent builder.
+- config_loader.cpp → todo → DC enumeration/special endpoints и base::Timer.
+- config_loader.h → todo → owner/config callback interface.
+- special_config_request.cpp → todo → DoH TXT/remote specs/order, RSA/AES simple config.
+- special_config_request.h → todo → request owner/cancellation/time handling.
+- dedicated_file_loader.cpp → todo → chunk loading/WeakInstance/file lifecycle.
+- dedicated_file_loader.h → todo → loader interfaces и typed callbacks.
+- proxy_check.cpp → todo → v4/v6 probe lifecycle и callbacks.
+- proxy_check.h → todo → checker handles/interface.
+
+Не выполнены обязательные сценарии полного сервера в памяти, base::Timer с
+виртуальным временем сессии, native simple config и live Instance getConfig.
+Задание целиком не закрыто; этап 3 не начат.

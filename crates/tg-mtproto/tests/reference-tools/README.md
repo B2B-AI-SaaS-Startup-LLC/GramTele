@@ -35,9 +35,9 @@ C++, Qt, OpenSSL, Nix или доступа к оригиналу при обы�
 - `extract_tls.py`: оригинальные PrepareClientHelloRules и Generator. Источники
   entropy/time фиксированы: RAND_bytes — счётчик, HTTP time=1700000000,
   permutation — reverse, X25519 keygen — OpenSSL с private bytes 1..32.
-  Вычисление публичной точки выполняет OpenSSL; Rust получает готовую точку как
-  часть входа HelloEntropy. Fixture проверяет формат hello, а не реализацию X25519
-  в порте. Сохраняются public point 32, u32 LE size, hello bytes, digest 32.
+  Вычисление публичной точки выполняет OpenSSL; Rust проверяет эту точку отдельным вызовом x25519-dalek для private 1..32;
+  default HelloEntropy теперь также вычисляет настоящий X25519. Fixture проверяет
+  и формат hello, и совпадение публичной точки с OpenSSL. Сохраняются public point 32, u32 LE size, hello bytes, digest 32.
 - `socks.cpp` и `connect.cpp`: тот же QTcpSocket/QNetworkProxy, который вызывает
   оригинальный TcpSocket, подключён к локальному тестовому QTcpServer. Сняты
   greeting, RFC1929 credentials, CONNECT и HTTP Basic challenge/retry. Интернет
@@ -56,3 +56,43 @@ DC options native образцы — встроенные адреса; допо
 таблицы и испорченные данные проверены своими тестами лишь в перечисленном
 объёме. Никакого утверждения о native паритете всех ветвей этих классов нет.
 Сверка source/fixture SHA-256 — `tests/fixtures/manifest.json`.
+
+## HTTP QNetworkAccessManager
+
+`http.cpp` воспроизводит настройки original connection_http.cpp (ContentLength,
+ContentType, manager.post) на локальном QTcpServer. Запуск native_http OUTPUT MODE,
+MODE = sequential / concurrent / malformed. Host с ephemeral port нормализован
+до example.com; формат OUTPUT — повторяющиеся u32 LE size + raw request.
+`http-post.bin` — два последовательных POST по одному keep-alive соединению.
+Результаты Qt 6.11.2: sequential 1 connection/2 requests/0 errors; concurrent
+6 connections/8 requests/0 errors; malformed 8 connections/8 requests/8 errors
+(Connection closed). Последний режим отвечает HTTP/1.0 с двойным пробелом, как
+test DC. Эти результаты не означают запуск целого клиента с его сборкой Qt.
+
+## Зашифрованный конверт SessionPrivate
+
+`extract_session.py TELEGRAM_ROOT OUTPUT.cpp` извлекает sendSecureRequest и
+prepareSecurePacket из оригинала без перевода алгоритма. Обвязка заменяет сетевой
+sink записью packet, logging выключен, RAND_bytes — счётчик 0..255, crl::now=0.
+Оригинальные SerializedRequest::addPadding/AuthKey/SHA256/AES-IGE компилируются и
+выполняются. `native_session OUTPUT.bin`: outgoing и incoming records, каждый
+u32 LE length + packet с transport prefix. Incoming строится отдельной обвязкой
+через оригинальный prepareAES(false), а не вызовом handleReceived. Поэтому
+эталон подтверждает исходящую функцию и входящие криптопримитивы, а не все
+проверки исходного получателя. Параметры зафиксированы в README крейта.
+
+Для target native_session нужны SCHEME_OBJECT и SCHEME_INCLUDE от native TL
+build, как для native_tls; сгенерированный OUTPUT.cpp положить в REFERENCE_DIR/session.cpp.
+
+`extract_session_receive.py TELEGRAM_ROOT OUTPUT.cpp` извлекает входную часть
+handleReceived до `wasConnected`: original размер/auth_key_id, AES decrypt,
+ConstTimeIsDifferent/SHA256, msg_len/padding/session/msg_id и badTime.
+Network queue и restart заменены sink-обвязкой, DebugEnabled=false, unix=1700000000.
+Метод исполняется для 19 входов: valid, auth_key_id, msg_key, session, msg_id low
+0/2, невыравненная/длинная/переполненная длина, padding>1024, границы времени,
+0..3 transport-padding words и truncated/oversized packet. Диспетчер RPC, salt mutation,
+окно дубликатов и callbacks не заменяются этими образцами: они проверяются отдельно.
+`native_session_receive OUTPUT.bin`: header[5] u32 LE = case, packet words,
+accepted, badTime, decrypted words; затем packet и decrypted header+body.
+
+Случай 18 хранит packet words=0 как компактное описание входа из 4 194 305 нулевых слов; C++ выполняет его целиком, Rust восстанавливает его перед проверкой. Это проверка верхней границы размера без 16 MiB нулей в fixture.
