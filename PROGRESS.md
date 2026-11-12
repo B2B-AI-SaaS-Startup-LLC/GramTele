@@ -844,9 +844,9 @@ SHA256 в исходном loader нет: хеш проверяет стенд, 
 
 ## Итог этапа 2
 
-Полный критерий PLAN.md ещё НЕ выполнен. Попытка входа 2026-11-12 остановилась на ответе тестового сервера; нижний слой tdata начат отдельно (см. следующий раздел).
+Полный критерий PLAN.md ещё НЕ выполнен. Повторная диагностика 2026-11-13 исчерпала 8 разрешённых попыток: PHONE_CODE_INVALID, причина не установлена, ошибка порта не исключена. Форматные слои tdata и Ayu реализованы отдельно; живой restore остаётся недостигнутым.
 
-- Консольный вход по коду на тестовом DC — предпринят: 9996620387, sendCode length=5; signIn с 22222 вернул PHONE_CODE_INVALID. После отказа код/номер не подбирались. Лог: crates/tg-core/docs/verification/login-test-dc.log.
+- Консольный вход по коду на тестовом DC — НЕ подтверждён: 8 новых номеров на DC1/2/3, документированные 11111/22222/33333 отвергнуты. SMS length=5, next_type=Call, timeout=90; C++ подтвердил байты всех семи пар с полными дампами. Проверены init/layer, маршруты, key/session IDs и preflight; причина не установлена. Логи: crates/tg-mtproto/docs/login-diagnostics/. Прежняя попытка 2026-11-12 — в crates/tg-core/docs/verification/login-test-dc.log.
 - Консольный вход по QR на тестовом DC — пример реализован и компилируется, но живой путь не достигнут: первый Instance не авторизован по коду.
 - help.getConfig через каждый транспорт — выполнен для TCP и HTTP,
   подтверждён instance-live.log с assert фактического транспорта.
@@ -1022,3 +1022,162 @@ main_domain.cpp). Основные main headers остаются todo этапа
 закрыт из-за отказа входа/непроверенных прокси; критерий этапа 3 также не закрыт:
 живого взаимного подключения по tdata ещё нет. Дальнейшие settings/chat/cache
 задачи не начинались. Пуш не выполнялся, stash base-crypto сохранён.
+
+
+## 2026-11-13 — диагностика тестового входа и данные AyuGram
+
+Работа выполнена в `port/ayu-data`, worktree `ayugram-rs-wt/ayu` от ffdb756.
+Принятый worktree tdata и ветка port/tdata удалены. Оригинал 0f2a31bb оставался
+только для чтения; сборки reference tools находятся вне клона. Пользовательские
+`tdata`, `ayu_settings.json`, `ayudata.db` не открывались и не копировались.
+
+### Тестовый вход: восемь попыток, причина PHONE_CODE_INVALID не установлена
+
+Лимит исчерпан: 8 разных номеров, только Test DC 1/2/3 и API 17349/hash из config.h.
+FLOOD_WAIT не было. Первая попытка была запущена старым бинарником до окончания
+сборки: в лимит включена, доказательным дампом не считается. Остальные семь:
+
+| Попытка | Номер | DC/код | Результат |
+|---|---|---|---|
+| 1 | 9996624442 | 2 / 22222 | PHONE_CODE_INVALID, старый бинарник |
+| 2 | 9996629716 | 2 / 22222 | PHONE_CODE_INVALID |
+| 3 | 9996613177 | 1 / 11111 | PHONE_CODE_INVALID |
+| 4 | 9996638502 | 3 / 33333 | PHONE_CODE_INVALID |
+| 5 | 9996621689 | 2 / 22222 | PHONE_CODE_INVALID, плюс и preflight |
+| 6 | 9996624880 | 2 / 22222 | PHONE_CODE_INVALID, suggestMainDcId при forced DC |
+| 7 | 9996621711 | 2 / 22222 | PHONE_CODE_INVALID, unforced, маршрут DC1→DC2 |
+| 8 | 9996621717 | 2 / 22222 | PHONE_CODE_INVALID, getConfig + nearest/countries, unforced |
+
+Все диагностические sendCode: **sentCodeTypeSms, length=5, next_type=Call,
+timeout=90, flags=6**. Ответ целиком выводится dump_to_text; почты/иной фазы в этих
+ответах нет. Подробные запросы, ответы, hex, адреса и session/key IDs:
+`crates/tg-mtproto/docs/login-diagnostics/`. Официальное правило номера/кода
+проверено по https://core.telegram.org/api/auth; изменение правил этим не доказано.
+
+Проверки по заданию:
+1. Тип ответа и полный dump получены для попыток 2–8.
+2. Нативный C++ lib_tl + оригинальная генерированная scheme сопоставил **все семь
+   фактических пар** sendCode/signIn с логами: байты одинаковые, codeSettings flags=0,
+   signIn flags=phone_code. Корпус cases.bin/tsv/json и cargo test закрепляют это.
+3. invokeWithLayer=229, initConnection API=17349, Desktop/Linux, 7.2.9,
+   en/tdesktop/en, params tz_offset=0: исходные вызовы и C++ wrapper сопоставлены.
+   Фактические prefix words попыток 3–8 совпали с C++ (в 2 ещё не логировались).
+   Desktop — явная модель headless-примера; оригинал может получать модель из DMI.
+   Это не перехват трафика запущенного графического оригинала.
+4. Подтверждены Test IP 149.154.175.10, 149.154.167.40, 149.154.175.117.
+   В 7–8 наблюдается переход main DC1→DC2 на sendCode; завершённый sendCode и signIn
+   используют DC2 и одинаковые auth_key_id/session_id. Конкретный промежуточный
+   migrate error перехватывается стандартным обработчиком, отдельно не логировался.
+5. DC1/11111 и DC3/33333 проверены, ответ тот же.
+6. intro_phone/code передают пустой codeSettings, phone/hash/code как в примере;
+   sendCode допускает плюс, signIn использует DigitsOnly. Intro запускает nearest
+   и countries асинхронно, телефонная форма отменяет ещё ожидающий nearest;
+   config_loader также получает getConfig. Попытки 5–8 проверили эти различия;
+   в 8 getConfig выполнен первым. Смена порядка результата не изменила.
+
+Восьмая попытка запущена через test_dc_tdata, который теперь использует общий
+login_qr после того же входа по коду, затем пишет временную tdata и запускает
+дочерний процесс. До QR/записи/нового процесса выполнение НЕ дошло:
+
+    test tdata stopped: Error { code: 400, kind: "PHONE_CODE_INVALID", description: "" }
+
+Протокольных исправлений сессии/Instance по живому серверу не заявляется:
+причина не найдена, ошибка порта не исключена. Добавлены только диагностика,
+нативный TL-корпус и общий сценарий примеров. Новых live-попыток после восьмой нет.
+
+### Ayu: 115 сохраняемых настроек, восемь таблиц
+
+`ayu-core` содержит модули по исходным путям, типизированные getters/setters и
+producer API, per-account ghost, MessageShot, процессное скрытие сообщений,
+полные SQL-сущности/запросы и mapper извлечённых значений HistoryItem/PeerData.
+Настройки/main-thread используют tg-rpl; SQLite — один владелец с mutex/клонами,
+busy_timeout=0, open lifetime до последнего клона. Таймштамп backup — tg_base unixtime.
+Глобальный singleton заменён явным владельцем. Реактивность reset и порядок
+Effect/save, а также save перед markAsOnline, проверены тестами.
+
+В `crates/ayu-core/docs/ayu-data-map.md` **517 строк функций** (декларации не
+дублируются, inline overloads и enum-конвертеры учтены). У 516 строк тестируется
+переведённая форматная/скалярная часть; repaintApp — только чтение, нужен оконный
+слой этапа 5. Извлечение из объектов Core и применение UI-эффектов явно отложены;
+они не выдаются за исполнение Main::Session/QWidget. Явные default/delete special members
+заменены владением Rust, без Clone.
+
+Фактических сохраняемых конечных настроек **115**: 88 корневых (включая множество
+shadowBanIds), 14 ghost и 13 message shot. Контейнеры дают 117 определений JSON-ключей.
+Есть также 8 старых корневых ghost-ключей для миграции и вычисляемое ghostModeActive.
+Число «124 сохраняемые настройки» из PLAN.md не совпадает с данным оригиналом;
+необнаруженные настройки не выдумывались. Все 115 проверены non-default значениями.
+
+Таблицы: SchemaVersion, DeletedMessage, EditedMessage, DeletedDialog, RegexFilter,
+RegexFilterGlobalExclusion, SpyMessageRead, SpyMessageContentsRead. Сохраняются
+ограничения, NULL, индексы, порядок столбцов, диапазоны/сортировки запросов и literal
+LIKE. Явный replace сохраняет разреженные/максимальные PK; обычный add/insert
+игнорирует переданный integer PK, как sqlite_orm. getExcludedByDialogId сохраняет
+две отдельные выборки и преобразование filterId в vector<char> под одним mutex.
+
+**Исполнением оригинала подтверждено:**
+- JSON defaults/all-changed одинаков байт в байт (4 пробела, Unicode/escaping,
+  порядок, double, нет финального LF); C++ прочитал Rust JSON тем же образом,
+  что собственный эталон. Конструкторы/конвертеры/load/save/validate берутся из
+  оригинала; в headless-обвязке Core::IsAppLaunched=false, edited="edited",
+  Native translate недоступен, ghost() выбирает 0. Это не запуск GUI.
+- 329 wrong-type/partial-mutation probes, 12 load-образцов (BOM, trailing data,
+  malformed JSON, migration, cGhost, validate), 2006 finite-double образцов Grisu2.
+- Оригинальный ayu_database.cpp/sqlite_orm создал все 8 таблиц и 12 строк:
+  i64/i32 MIN/MAX, разреженные edited fakeId=1/7, Spy fakeId=i64::MAX, NULL/0,
+  Unicode/пустые строки и бинарные NUL/0x80/0xff. Rust прочитал и записал ту же
+  схему/строки; оригинальный C++ прочитал Rust. Все ORM dumps сравнились побайтно;
+  sqlite_master — по полному тексту SQL и именам, не по rootpage.
+- 9 вариантов sync_schema: extra/missing nullable/missing required, NOT NULL,
+  игнорируемый declared type, V0, future/overflow version, отсутствие id=1.
+- Оригинальный getter подтвердил обрезание text на NUL; raw SQLite остаётся полным.
+
+**Своими тестами:** все typed getters/value/changes/setters, SQL-условия/пределы/
+сортировки/ошибки/rollback/LIKE, SQLite numeric coercions, legacy filterId TEXT,
+параллельные клоны, повреждённая БД/backup, ghost locks/accounts, effects/lifetime/reset,
+извлечённый message mapping. Новых обычных тестов **21**: 20 ayu-core, 1 native login TL.
+
+**Только чтением / без запуска в этой среде:** привязка к живым Core/Window/Translator/
+Tray/Worker, QWidget repaint и платформенный Native translate; это этапы 4/5.
+Оконный/Windows runtime не проверялся. Реальная пользовательская БД не использовалась.
+
+Новые прямые внешние зависимости ayu-core: rusqlite 0.42.0 (bundled), serde 1.0.229,
+serde_json 1.0.154 (float_roundtrip); tg-base/tg-rpl — существующие workspace крейты.
+libsqlite3-sys 0.40.0 транзитивный, bundled SQLite 3.54.1. Нативная SQLite из Nix —
+3.53.3. Cargo.lock обновлён и коммитится. В tg-mtproto новых зависимостей нет.
+
+**Особенности оригинала / отличия:**
+- V1 удаляет старые regex-фильтры; sync_schema игнорирует declared type/порядок
+  уже существующих столбцов. Поведение сохранено, не канонизируется молча.
+- Если нет SchemaVersion(id=1), но есть другие ID, insert исключает integer PK,
+  создаёт следующий rowid, UPDATE id=1 не обновляет строку. Этот дефект сохранён.
+- std::string читается sqlite_orm до NUL: при повторной записи теряется хвост.
+  Это дефект/ограничение оригинала, не скрытое обещание lossless для таких текстов;
+  blobs полные. postAuthor/replyMarkupSerialized отсутствуют в ORM и не дописаны.
+- Порядок shadowBanIds воспроизводит Linux libstdc++ x86_64 (reserve/rehash), не
+  обещается для другого стандартного C++ runtime. Числа печатает перевод Grisu2.
+- RegexFilter::toJson ограничен длиной id; C++ без NUL читает за vector и не даёт
+  определённого эталона. Нефинитный typed double отвергается явно; C++ мог записать
+  null и затем не прочитать его. Rust дополнительно возвращает ошибки I/O/JSON;
+  уже выполненные присваивания сохраняются. Default — модель в памяти, путь явный.
+
+Учёт этого среза: 10 строк (одна добавлена для libs/json_ext.hpp), 3 done,
+6 partial, 1 replaced. lib_storage и crates/tg-cache не изменялись.
+- ayu_settings.cpp/.h (partial) → 4/5 → владелец Core, active account, localized edited,
+  применение Effect к filters/translator/tray/worker/window.
+- ayu_state.cpp/.h (partial) → 4 → HistoryItem IDs и токен жизненного цикла Session.
+- data/messages_storage.cpp/.h (partial) → 4 → извлечение HistoryItem/PeerData,
+  настоящий flags/entities mapper; значения/SQL слой уже проверены.
+- data/ayu_database.cpp/.h и entities.h — done, libs/json_ext.hpp — replaced.
+
+Проверки Rust 1.95.0: cargo fmt --check — exit 0;
+cargo clippy --workspace --all-targets -- -D warnings — exit 0;
+cargo test --workspace — exit 0, **616 passed, 0 failed, 3 ignored**.
+Логи: crates/ayu-core/docs/verification/workspace.log, summary.txt, native-summary.txt,
+native-read-rust.hex; вход — crates/tg-mtproto/docs/login-diagnostics/.
+
+Полный этап 2 и этап 3 не объявлены закрытыми: code/QR/живой restore остаются
+неподтверждёнными; Telegram settings/chat/cache из следующего среза не начаты.
+Вопросов по формату Ayu, требующих решения пользователя, нет. Причина входа
+остаётся открытой; лимит этого задания исчерпан. Пуш не выполняется, stash
+base-crypto сохраняется, чужие README/изображение не меняются.
