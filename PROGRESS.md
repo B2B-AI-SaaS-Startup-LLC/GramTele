@@ -646,3 +646,102 @@ Rust 1.95.0: `cargo fmt --check` exit 0;
 Не выполнены обязательные сценарии полного сервера в памяти, base::Timer с
 виртуальным временем сессии, native simple config и live Instance getConfig.
 Задание целиком не закрыто; этап 3 не начат.
+
+## Этап 2: автомат Session/SessionPrivate — завершён текущий объём
+
+Перенесены только четыре файла: `SourceFiles/mtproto/session.cpp`, `session.h`,
+`session_private.cpp`, `session_private.h`; в ledger все четыре **done**.
+Instance/sender/concurrent_sender/config_loader/special_config_request/
+dedicated_file_loader/proxy_check/facade в этой задаче не начинались. Этап 3
+не начинался. Предыдущий раздел «промежуточная фиксация» описывает старый cbb315e,
+а не текущее состояние автомата.
+
+Промежуточные коммиты: 012184a (нативный входящий конверт), 8f328e2 (автомат
+и первоначальные сценарии), 55e7e83 (аудит контрактов и дополнительные сценарии).
+Ветка port/tg-mtproto-session влита в main отдельным merge. Пользовательское
+прерывание из-за сетевой ошибки модели не потеряло незакоммиченную работу:
+перед промежуточным коммитом повторены fmt/clippy и все тесты tg-mtproto.
+
+**Карта готовности:** `crates/tg-mtproto/docs/session-map.md`, 135 строк:
+121 определение .cpp, 4 свободных helper, 9 inline SessionData и Default опций.
+135 имеют перевод и связанный существующий тест. Три строки дополнительно
+затронуты нативными эталонами конверта; это пересекающиеся категории, а не 138
+функций. Функций, оставленных только чтением без теста, нет. Настоящие Qt/OS
+интеграции, reentrancy и источники platform metadata не выдаются за native запуск.
+
+**Окружение:** SessionEnvironment читает снимок DcOptions, test/destroyer mode,
+device/system/language metadata, proxy settings и наличие callback; подписывается
+на изменения ключей/options/CDN индивидуальным unbounded каналом без потерь.
+InstanceEvent соответствует фактическим вызовам Instance в этих четырёх файлах:
+responses/updates/state/reset, запись ключей и key destruction, config/CDN/time
+requests, restart timeout/bad configuration. Все уведомления проходят одну FIFO,
+затем tg-runtime main queue. Dcenter и общий RequestStore передаются отдельно.
+Прямых export authorization/change DC/Config calls здесь нет — методы в трейт
+не добавлялись. Реальный Instance реализует контракт в следующей задаче.
+
+Session — задача Tokio LocalSet, снаружи Send SessionHandle. Rc TimerHost
+создаётся на потоке задачи. Все таймеры (sender/retry/connect/receive/better/
+ping/check/container) — base::Timer. Alarm отделён от протокола: ThreadAlarm
+для приложения, ManualClock и явный wake/process в тестах без sleep.
+ClientInfo передаёт платформенные значения; смена снимка поддержана командой.
+UTC/server time shift пересчитывается для каждого initConnection. Оригинальная
+настройка prefer-ipv6 регистрируется через tg-base options Registry.
+
+**Интерфейс соединений:** используются TcpReader/TcpWriter из cbb315e, поэтому
+чтение не блокируется ожиданием записи. SessionTransport.submit не ждёт I/O,
+next_event cancellation-safe; executor обслуживает candidates/Send/Close/TimedOut
+и возвращает packets/errors/состояние/SyncTimeRequest. ConnectTimeout обновляет
+fullConnectTimeout при resolving proxy; начальное значение повторяет 4000 *
+max(resolvedIPs,1), обычный транспорт — 8000. Реальная factory подключается
+будущим Instance; сессия не содержит фиктивного успешного сетевого backend.
+
+**Проверено эталоном оригинала:** отдельно скомпилирован и исполнен входящий
+фрагмент handleReceived до dispatcher, с настоящими AuthKey/SHA/AES/constant-time
+comparison и проверками length/keyId/msgKey/session/msgId/padding/time. 19 samples,
+включая oversized packet через компактное описание 4 194 305 нулевых слов.
+Исходящий sendSecureRequest сохранён предыдущим эталоном. Нативный QObject loop,
+диспетчер RPC и все состояния автомата C++ целиком не выполнялись.
+
+**Проверено своим сервером/тестами:** независимые MTProto2 и legacy bind key
+schedules, настоящий TCP framing/CTR поверх duplex, собственный RSA; permanent
+и temporary DH с dh_gen_retry, проверка и расшифровка bind inner, CDN без
+permanent/bind. Разрыв после отправки, reconnect/resend, все коды bad_msg
+(16/17/18/19/20/32/33/34/35/48/64 и неизвестный), bad_server_salt,
+new_session_created, контейнеры, gzip, acks, state request/info, resend request,
+пинги и FIFO доставка RPC в main. Проверки повреждений, gzip budget/depth,
+received window, seq wrapping, invokeAfter/layer, container cut, key ownership,
+destroyer/-404/-444/-429, cancellation/pause, proxy variants, backoff/time
+adjustment и всех видов таймеров дополнены тестами прямо через автомат.
+
+Новых тестов 24: **23 сессионных**, **1 native receive fixture** (19 cases внутри).
+Rust **1.95.0**, закреплённый nix develop. Команда PORTING.md:
+
+- cargo fmt --check: **exit 0**;
+- cargo clippy --workspace --all-targets -- -D warnings: **exit 0**;
+- cargo test --workspace: **exit 0**, **549 passed, 0 failed, 2 ignored**.
+
+Полный вывод: `crates/tg-mtproto/docs/verification/session-automaton-checks.log`,
+сводка — session-automaton-summary.txt. В tg-mtproto теперь 89 ordinary tests
+и два ignored live tests. Новых зависимостей в этой части нет; x25519-dalek
+2.0.1 относится к принятому cbb315e. tg-runtime/tg-rpl не изменялись.
+
+**Живой сервер:** в текущей задаче не запускался. Прежний DH TCP/HTTP — история
+cbb315e; help.getConfig, аккаунт и production DC не использовались.
+
+**Особенности оригинала и отличия:** LogIdsVector дублирует первый ID;
+notifyConnectionInited не сравнивает переданные options; checkSentRequests
+планируется в контейнерной, но не одиночной ветке; skip двух выключенных
+address/protocol flags пропускает только первый вариант. Сохранено и проверено.
+Входящие msgs_state_req/msg_resend_req/future_salts идут через fallback dispatcher
+как в оригинале (regular update / игнорирование на иных DC). destroy_auth_key
+отправляет Instance, здесь реализован его сессионный lifecycle и уведомления.
+Общая SyncTimeRequestDuration в C++ не синхронизирована между сессионными потоками;
+в Rust она атомарна. Пустое аутентифицированное тело безопасно приводит к
+ParseError/reconnect, тогда как C++ попадает в Expects(from < end). QObject
+signals/deleteLater заменены FIFO/каналами и владением. Системные значения
+ОС/дистрибутива поступают через ClientInfo; будущий слой обновляет их снимок.
+Непроверенные настоящие Qt/ОС обстоятельства не считаются native parity proof.
+
+Вопросов, требующих решения пользователя для этого объёма, не осталось.
+Следующая задача — только оставшиеся файлы этапа 2 по отдельному поручению.
+Cargo.lock не добавлен, push не выполнялся; stash base-crypto сохранён.

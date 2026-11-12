@@ -2052,10 +2052,10 @@ SourceFiles/mtproto/mtproto_response.h,87,tg-mtproto,2,done
 SourceFiles/mtproto/proxy_check.cpp,114,tg-mtproto,2,todo
 SourceFiles/mtproto/proxy_check.h,35,tg-mtproto,2,todo
 SourceFiles/mtproto/sender.h,477,tg-mtproto,2,todo
-SourceFiles/mtproto/session.cpp,590,tg-mtproto,2,todo
-SourceFiles/mtproto/session.h,222,tg-mtproto,2,todo
-SourceFiles/mtproto/session_private.cpp,2813,tg-mtproto,2,partial
-SourceFiles/mtproto/session_private.h,251,tg-mtproto,2,partial
+SourceFiles/mtproto/session.cpp,590,tg-mtproto,2,done
+SourceFiles/mtproto/session.h,222,tg-mtproto,2,done
+SourceFiles/mtproto/session_private.cpp,2813,tg-mtproto,2,done
+SourceFiles/mtproto/session_private.h,251,tg-mtproto,2,done
 SourceFiles/mtproto/special_config_request.cpp,550,tg-mtproto,2,todo
 SourceFiles/mtproto/special_config_request.h,85,tg-mtproto,2,todo
 SourceFiles/mtproto/type_utils.h,19,tg-mtproto,2,done
