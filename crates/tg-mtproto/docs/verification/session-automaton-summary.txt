@@ -8,3 +8,4 @@ Session map: 135 functions; 135 associated with tests; 3 additionally have nativ
 Native receive cases: 19; original handleReceived envelope prefix executed, not the whole C++ QObject/session dispatcher.
 Live tests: not run in this task; help.getConfig/account/production requests not made.
 New dependencies: none in this task.
+Empty authenticated message: original Expects precondition preserved; Rust panic tested after decrypting an authenticated envelope.

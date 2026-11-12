@@ -629,8 +629,22 @@ fn gzip_container_budget_parse_errors_and_replay_window() {
         ),
         HandleResult::RestartConnection
     );
+    let empty = server_encrypt(&Message {
+        salt: 100,
+        session_id: h.p.session_id(),
+        msg_id: h.server_id + 4,
+        seq_no: 0,
+        body: vec![],
+    });
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| h.p.on_packet(
+            h.connection,
+            empty,
+            false
+        )))
+        .is_err()
+    );
     for bad in [
-        vec![],
         vec![GZIP_PACKED as i32],
         vec![MSG_CONTAINER as i32],
         vec![MSG_CONTAINER as i32, 1, 1, 0, 1, -4],
