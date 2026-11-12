@@ -9,7 +9,7 @@ impl Writer {
         self.0.extend(v.to_be_bytes());
     }
     pub fn bytes(&mut self, v: &[u8]) {
-        self.i32(v.len() as i32);
+        self.i32(u32::try_from(v.len()).expect("Qt_5_1 QByteArray exceeds 32-bit length") as i32);
         self.0.extend_from_slice(v);
     }
     pub fn string(&mut self, v: &str) {
@@ -40,11 +40,11 @@ impl<'a> Reader<'a> {
         Some(u64::from_be_bytes(self.raw(8)?.try_into().ok()?))
     }
     pub fn bytes(&mut self) -> Option<Vec<u8>> {
-        let len = self.i32()?;
-        if len == -1 {
+        let len = self.i32()? as u32;
+        if len == u32::MAX {
             return Some(Vec::new());
         }
-        self.raw(usize::try_from(len).ok()?).map(<[u8]>::to_vec)
+        self.raw(len as usize).map(<[u8]>::to_vec)
     }
     pub fn string(&mut self) -> Option<String> {
         let bytes = self.bytes()?;
@@ -84,11 +84,11 @@ impl Writer {
 }
 impl Reader<'_> {
     pub fn nullable_bytes(&mut self) -> Option<Option<Vec<u8>>> {
-        let len = self.i32()?;
-        if len == -1 {
+        let len = self.i32()? as u32;
+        if len == u32::MAX {
             Some(None)
         } else {
-            Some(Some(self.raw(usize::try_from(len).ok()?)?.to_vec()))
+            Some(Some(self.raw(len as usize)?.to_vec()))
         }
     }
     pub fn nullable_utf16(&mut self) -> Option<Option<Vec<u16>>> {

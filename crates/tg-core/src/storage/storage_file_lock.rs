@@ -1,3 +1,5 @@
-//! Same four-byte fcntl/LockFile range, reopen and owner-termination behavior.
-//! The already ported base implementation replaces the duplicate storage class.
-pub use tg_base::file_lock::FileLock;
+//! Same reopen, four-byte range, owner shutdown and RAII unlock as base::FileLock.
+#[cfg(unix)]
+pub use super::storage_file_lock_posix::FileLock;
+#[cfg(windows)]
+pub use super::storage_file_lock_win::FileLock;

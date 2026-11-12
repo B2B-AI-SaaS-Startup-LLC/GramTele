@@ -1,0 +1,13 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/tdata' is dirty
+   Compiling tg-base v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-base)
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-mtproto)
+   Compiling tg-core v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.40s
+     Running tests/tdata.rs (/home/yarik/Projects/ayugram-rs/target/debug/deps/tdata-d1cdb455d692e9df)
+
+running 1 test
+test original_directories_read_and_exact_write has been running for over 60 seconds
+test original_directories_read_and_exact_write ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 180.01s
+

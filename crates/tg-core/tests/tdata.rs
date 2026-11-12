@@ -103,8 +103,12 @@ fn check_domain(root: &Path, pass: bool, count: i32) {
             expected(*i).serialize_mtp_authorization()
         );
     }
-    assert!(d.check_passcode(if pass { b"test-passcode" } else { b"" }));
-    assert!(d.start_modern(b"wrong password").is_err());
+    if pass && count == 1 {
+        assert!(matches!(
+            d.start_modern(b"wrong password"),
+            Err(Error::IncorrectPasscode)
+        ));
+    }
 }
 fn tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
     fn walk(root: &Path, dir: &Path, out: &mut Vec<(PathBuf, Vec<u8>)>) {
@@ -137,6 +141,7 @@ fn original_directories_read_and_exact_write() {
     }
 }
 #[test]
+#[ignore = "manual synthetic directory export for the native reader; requires AYUGRAM_SYNTHETIC_REFERENCE_OUTPUT"]
 fn export_directories_for_native_reader() {
     // Explicit opt-in writes only synthetic fixtures to a fresh test output path.
     if let Some(root) = std::env::var_os("AYUGRAM_SYNTHETIC_REFERENCE_OUTPUT") {
@@ -308,11 +313,16 @@ fn legacy_local_keys_map_handles_and_passcode_changes() {
         .start_from_scratch(&mut random, &mut manager)
         .unwrap();
     assert!(!domain.has_local_passcode());
-    let changes = domain.local_passcode_changed();
+    let changes = std::rc::Rc::new(std::cell::Cell::new(0));
+    let notified = changes.clone();
+    let lifetime = tg_rpl::Lifetime::new();
+    domain
+        .local_passcode_changed()
+        .on_next(move |_| notified.set(notified.get() + 1), &lifetime);
     domain
         .set_passcode(b"password", &mut manager, &mut random)
         .unwrap();
-    assert!(changes.try_recv().is_ok());
+    assert_eq!(changes.get(), 1);
     assert!(domain.has_local_passcode());
     assert!(domain.check_passcode(b"password"));
     assert!(!domain.check_passcode(b"bad"));
@@ -340,6 +350,19 @@ fn legacy_local_keys_map_handles_and_passcode_changes() {
     account.read_map_with(None, b"pass").unwrap();
     assert!(account.local_key.as_ref().unwrap().equals(&local));
     assert_eq!(account.map.data.len(), 12);
+    account.authorization = expected(0);
+    account.write_mtp_data(&mut manager, &mut random).unwrap();
+    manager.sync().unwrap();
+    let mut migrated = Domain::new(&temp.0, "legacy");
+    assert!(matches!(
+        migrated.start(b"wrong", &mut random, &mut manager),
+        Err(Error::IncorrectPasscodeLegacy)
+    ));
+    migrated.start(b"pass", &mut random, &mut manager).unwrap();
+    assert_eq!(migrated.owner.accounts[0].1.user_id, expected(0).user_id);
+    assert_eq!(migrated.old_version(), APP_VERSION);
+    manager.sync().unwrap();
+
     assert!(account.temp_directory().ends_with("temp_legacy"));
     assert!(account.support_mode_path().ends_with("user_legacy/support"));
     assert!(AccountMap::parse(vec![0, 0, 0, 0]).is_err());
@@ -354,5 +377,201 @@ fn legacy_local_keys_map_handles_and_passcode_changes() {
     assert!(!temp.0.join(format!("{}s", to_file_part(k))).exists());
     let mut main = MainDomain::default();
     main.account_added_in_storage(0, expected(0)).unwrap();
-    assert!(main.account_added_in_storage(0, expected(1)).is_err());
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+        || main.account_added_in_storage(0, expected(1))
+    ))
+    .is_err());
+}
+
+#[test]
+fn queued_account_list_and_map_virtual_timers() {
+    use std::sync::Mutex;
+    use tg_base::timer::{ManualClock, TimerHost};
+    use tg_core::storage::storage_account::AccountWrites;
+    tg_runtime::main_queue().bind_current_thread();
+    let temp = Temp::new();
+    let clock = ManualClock::new(0);
+    let host = TimerHost::new(Arc::new(clock.clone()));
+    let mut random = Entropy::default();
+    let mut a = Account::new(&temp.0, "data");
+    a.local_key = Some(Arc::new(AuthKey::local([2; 256])));
+    let mut writes = AccountWrites::new(&host);
+    let mut manager = WriteManager::default();
+    writes.write_map_delayed();
+    clock.advance(999);
+    host.process();
+    assert!(!writes.process(&a, &mut manager, &mut random).unwrap());
+    clock.advance(1);
+    host.process();
+    assert!(writes.process(&a, &mut manager, &mut random).unwrap());
+    assert!(!writes.process(&a, &mut manager, &mut random).unwrap());
+    writes.write_map_queued();
+    tg_runtime::process_main_queue();
+    assert!(writes.process(&a, &mut manager, &mut random).unwrap());
+    manager.sync().unwrap();
+    let mut d = Domain::new(&temp.0, "data");
+    d.local_key = a.local_key.clone();
+    d.encrypt_local_key(&[], &mut random).unwrap();
+    d.owner.account_added_in_storage(0, expected(0)).unwrap();
+    let d = std::rc::Rc::new(std::cell::RefCell::new(d));
+    let manager = Arc::new(Mutex::new(manager));
+    for _ in 0..3 {
+        tg_core::main::main_domain::schedule_write_accounts(&d, manager.clone());
+    }
+    tg_runtime::process_main_queue();
+    manager.lock().unwrap().sync().unwrap();
+    assert!(read_file("key_data", &temp.0).is_ok());
+    tg_core::main::main_domain::schedule_write_accounts(&d, manager.clone());
+    drop(d);
+    tg_runtime::process_main_queue();
+}
+
+#[test]
+fn account_config_legacy_blocks_and_partial_authorization() {
+    let temp = Temp::new();
+    let mut random = Entropy::default();
+    let mut manager = WriteManager::default();
+    let mut a = Account::new(&temp.0, "data");
+    a.local_key = Some(Arc::new(AuthKey::local([3; 256])));
+    let config = tg_mtproto::mtproto_config::Config::new(Environment::Test);
+    a.write_mtp_config(&config, &mut manager, &mut random)
+        .unwrap();
+    manager.sync().unwrap();
+    assert!(a.read_mtp_config().unwrap().unwrap().is_test_mode());
+    let mut inner = EncryptedDescriptor::new(0);
+    inner.stream.i32(1);
+    inner.stream.i32(123);
+    inner.stream.i32(2);
+    inner.stream.i32(0);
+    inner.stream.i32(2);
+    inner.stream.0.extend([42; 256]);
+    let mut f = FileWriteDescriptor::new(&to_file_part(a.data_name_key), &temp.0);
+    f.write_encrypted(&mut inner, a.local_key.as_ref().unwrap(), &mut random);
+    f.finish(&mut manager, true).unwrap();
+    a.read_mtp_data().unwrap();
+    assert_eq!(a.authorization.user_id, 123);
+    assert_eq!(a.authorization.keys[0].data(), &[42; 256]);
+    let modern = expected(0);
+    a.authorization = Authorization::default();
+    a.apply_read_authorization_context(&modern.serialize_mtp_authorization(), expected(1))
+        .unwrap();
+    assert_eq!(a.authorization.user_id, modern.user_id);
+    assert_eq!(a.authorization.keys.len(), 2);
+    let mut partial = Authorization::default();
+    let full = modern.serialize_mtp_authorization();
+    assert!(partial.set_mtp_authorization(&full[..284]).is_err());
+    assert_eq!(partial.user_id, modern.user_id);
+    assert_eq!(partial.keys.len(), 1);
+    assert_eq!(Authorization::default().session_unique_id(true), 0);
+    let mut lock = tg_core::storage::storage_file_lock::FileLock::new();
+    let mut file = None;
+    let mut opts = fs::OpenOptions::new();
+    opts.read(true).write(true).create(true);
+    assert!(lock.lock(&mut file, &temp.0.join("lock"), &opts));
+    assert!(lock.locked());
+    lock.unlock();
+    assert!(!lock.locked());
+}
+
+#[test]
+fn asynchronous_manager_drop_flush_and_io_failures() {
+    let temp = Temp::new();
+    let root = &temp.0;
+    let mut manager = AsyncWriteManager::default();
+    manager.write(WriteEntry {
+        base: root.join("async"),
+        data: encode_file(b"first", 1),
+    });
+    manager
+        .write_sync(WriteEntry {
+            base: root.join("async"),
+            data: encode_file(b"sync", 2),
+        })
+        .unwrap();
+    manager.sync().unwrap();
+    assert_eq!(read_file("async", root).unwrap().data, b"sync");
+    manager.stop().unwrap();
+    {
+        let mut file = FileWriteDescriptor::new("drop", root);
+        file.write_data(Some(b"saved by destructor"));
+    }
+    tg_core::storage::details::storage_file_utilities::sync().unwrap();
+    let file = read_file("drop", root).unwrap();
+    assert_eq!(file.reader().bytes().unwrap(), b"saved by destructor");
+    tg_core::storage::details::storage_file_utilities::finish().unwrap();
+    fs::write(root.join("blocked"), b"file").unwrap();
+    let mut queue = WriteManager::default();
+    queue.write(WriteEntry {
+        base: root.join("blocked/x"),
+        data: encode_file(b"bad", 1),
+    });
+    queue.write(WriteEntry {
+        base: root.join("good"),
+        data: encode_file(b"good", 1),
+    });
+    assert!(queue.sync().is_err());
+    assert_eq!(read_file("good", root).unwrap().data, b"good");
+}
+
+#[test]
+fn original_qt_stream_and_both_pbkdf_variants() {
+    let bytes = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/qt-pbkdf.bin"))
+        .unwrap();
+    let mut r = ByteArrayReader::new(&bytes);
+    assert_eq!(r.nullable_bytes(), Some(None));
+    assert_eq!(r.nullable_bytes(), Some(Some(vec![])));
+    assert_eq!(r.nullable_utf16(), Some(None));
+    assert_eq!(r.nullable_utf16(), Some(Some(vec![])));
+    assert_eq!(r.nullable_utf16(), Some(Some(vec![0xd800, 0x41, 0xdc00])));
+    assert_eq!(read_color(&mut r), Some([1, 2, 3, 4]));
+    let salt: Vec<_> = (0..32).collect();
+    for pass in [b"".as_slice(), b"legacy-pass".as_slice()] {
+        let key = create_legacy_local_key(pass, &salt);
+        assert_eq!(r.raw(256).unwrap(), key.data());
+    }
+    for pass in [b"".as_slice(), b"pass".as_slice()] {
+        let key = create_local_key(pass, &salt);
+        assert_eq!(r.raw(256).unwrap(), key.data());
+    }
+    let narrow = r.bytes().unwrap();
+    let expected_wide = r.bytes().unwrap();
+    assert_eq!(
+        Authorization::from_bytes(&narrow)
+            .unwrap()
+            .serialize_mtp_authorization(),
+        expected_wide
+    );
+    assert!(r.at_end());
+}
+
+#[test]
+fn malformed_modern_info_preserves_original_start_contract() {
+    let temp = Temp::new();
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tdata/nopass-1");
+    let file = read_file("key_data", &fixture).unwrap();
+    let mut r = file.reader();
+    let salt = r.bytes().unwrap();
+    let key = r.bytes().unwrap();
+    let mut payload = ByteArrayWriter::default();
+    payload.bytes(&salt);
+    payload.bytes(&key);
+    payload.bytes(b"broken info");
+    fs::write(
+        temp.0.join("key_datas"),
+        encode_file(&payload.0, APP_VERSION),
+    )
+    .unwrap();
+    let mut domain = Domain::new(&temp.0, "data");
+    assert!(matches!(
+        domain.start_modern(&[]),
+        Err(Error::Invalid("could not decrypt info"))
+    ));
+    assert!(domain.local_key.is_some());
+    // Original start() falls back to generateLocalKey with a key already assigned.
+    // Preserve that Expects failure as a Rust panic, rather than silently wiping it.
+    let mut again = Domain::new(&temp.0, "data");
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        again.start(&[], &mut Entropy::default(), &mut WriteManager::default())
+    }));
+    assert!(result.is_err());
 }

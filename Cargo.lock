@@ -1290,6 +1290,7 @@ dependencies = [
  "md-5",
  "tg-base",
  "tg-mtproto",
+ "tg-rpl",
  "tg-runtime",
  "tg-scheme",
  "tg-tl",

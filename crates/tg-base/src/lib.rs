@@ -33,6 +33,7 @@ pub mod options;
 pub mod parse_helper;
 pub mod platform;
 pub mod power_save_blocker;
+pub mod qt_stream;
 pub mod qthelp_regex;
 pub mod qthelp_url;
 pub mod random;
@@ -50,5 +51,3 @@ pub mod zlib_help;
 /// The JSON implementation already selected for QJson replacements. Shared by
 /// low-level users such as MTProto DoH without choosing another JSON backend.
 pub use serde_json as json;
-
-pub mod qt_stream;

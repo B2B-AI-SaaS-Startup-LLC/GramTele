@@ -1,0 +1,170 @@
+ninja: Entering directory `/tmp/ayugram-tdata-reference-clean'
+[1/3] Building CXX object CMakeFiles/native_tdata.dir/tmp/ayugram-tdata-capture/utilities.cpp.o
+In file included from /home/yarik/Projects/AyuGramDesktop/Telegram/SourceFiles/logs.h:12,
+                 from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:18,
+                 from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/prefix.hpp:2,
+                 from <command-line>:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/debug_log.h:23:9: warning: ‘LOG’ redefined
+   23 | #define LOG(message) (::base::LogWriteMain(QString message))
+      |         ^~~
+/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:8:9: note: this is the location of the previous definition
+    8 | #define LOG(x) do {} while (false)
+      |         ^~~
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/debug_log.h:33:9: warning: ‘DEBUG_LOG’ redefined
+   33 | #define DEBUG_LOG(message) {\
+      |         ^~~~~~~~~
+/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:9:9: note: this is the location of the previous definition
+    9 | #define DEBUG_LOG(x) do {} while (false)
+      |         ^~~~~~~~~
+In file included from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:5:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/bytes.h:17:19: warning: ‘using gsl::byte = enum class std::byte’ is deprecated: Use std::byte instead. [-Wdeprecated-declarations]
+   17 | using type = gsl::byte;
+      |                   ^~~~
+In file included from /nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/span:21,
+                 from /nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/algorithm:21,
+                 from /nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/gsl:21,
+                 from /home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/basic_types.h:24,
+                 from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:2:
+/nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/byte:91:7: note: declared here
+   91 | using byte GSL_DEPRECATED("Use std::byte instead.") = std::byte;
+      |       ^~~~
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/bytes.h:17:23: warning: ‘using gsl::byte = enum class std::byte’ is deprecated: Use std::byte instead. [-Wdeprecated-declarations]
+   17 | using type = gsl::byte;
+      |                       ^
+/nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/byte:91:7: note: declared here
+   91 | using byte GSL_DEPRECATED("Use std::byte instead.") = std::byte;
+      |       ^~~~
+In file included from /home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/rpl.h:35,
+                 from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:11:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h: In lambda function:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h:82:35: warning: implicit capture of ‘this’ via ‘[=]’ is deprecated in C++20 [-Wdeprecated]
+   82 |                         | on_next([=](auto &&data) {
+      |                                   ^
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h:82:35: note: add explicit ‘this’ or ‘*this’ capture
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h: In lambda function:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h:97:35: warning: implicit capture of ‘this’ via ‘[=]’ is deprecated in C++20 [-Wdeprecated]
+   97 |                         | on_next([=](auto &&data) {
+      |                                   ^
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h:97:35: note: add explicit ‘this’ or ‘*this’ capture
+In file included from /tmp/ayugram-tdata-capture/utilities.h:10,
+                 from /tmp/ayugram-tdata-capture/utilities.cpp:1:
+/home/yarik/Projects/AyuGramDesktop/Telegram/SourceFiles/mtproto/mtproto_auth_key.h: At global scope:
+/home/yarik/Projects/AyuGramDesktop/Telegram/SourceFiles/mtproto/mtproto_auth_key.h:19:38: warning: ‘using gsl::byte = enum class std::byte’ is deprecated: Use std::byte instead. [-Wdeprecated-declarations]
+   19 |         using Data = std::array<gsl::byte, kSize>;
+      |                                      ^~~~
+/nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/byte:91:7: note: declared here
+   91 | using byte GSL_DEPRECATED("Use std::byte instead.") = std::byte;
+      |       ^~~~
+In file included from /tmp/ayugram-tdata-capture/utilities.cpp:2:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/openssl_help.h: In member function ‘bool openssl::BigNum::isPrime(const openssl::Context&) const’:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/openssl_help.h:276:51: warning: ‘int BN_is_prime_ex(const BIGNUM*, int, BN_CTX*, BN_GENCB*)’ is deprecated: Since OpenSSL 3.0 [-Wdeprecated-declarations]
+  276 |                 const auto result = BN_is_prime_ex(
+      |                                     ~~~~~~~~~~~~~~^
+  277 |                         raw(),
+      |                         ~~~~~~                     
+  278 |                         kMillerRabinIterationCount,
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  279 |                         context.raw(),
+      |                         ~~~~~~~~~~~~~~             
+  280 |                         nullptr);
+      |                         ~~~~~~~~                   
+In file included from /home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/openssl_help.h:15:
+/nix/store/f0lcjigadrvilgw2fprzdd96fw055q0b-openssl-3.6.5-dev/include/openssl/bn.h:379:5: note: declared here
+  379 | int BN_is_prime_ex(const BIGNUM *p, int nchecks, BN_CTX *ctx, BN_GENCB *cb);
+      |     ^~~~~~~~~~~~~~
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/openssl_help.h: In instantiation of ‘bytes::vector openssl::Sha512(Args&& ...) [with Args = {const gsl::span<const std::byte, 18446744073709551615>&, gsl::span<const std::byte, 18446744073709551615>, const gsl::span<const std::byte, 18446744073709551615>&}; <template-parameter-1-2> = void; bytes::vector = std::vector<std::byte>]’:
+/tmp/ayugram-tdata-capture/utilities.cpp:377:35:   required from here
+  377 |         const auto hash = openssl::Sha512(s, bytes::make_span(passcode), s);
+      |                           ~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/openssl_help.h:594:17: warning: ‘int SHA512_Init(SHA512_CTX*)’ is deprecated: Since OpenSSL 3.0 [-Wdeprecated-declarations]
+  594 |                 SHA512_Init,
+      |                 ^~~~~~~~~~~
+In file included from /home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/openssl_help.h:16:
+/nix/store/f0lcjigadrvilgw2fprzdd96fw055q0b-openssl-3.6.5-dev/include/openssl/sha.h:124:27: note: declared here
+  124 | OSSL_DEPRECATEDIN_3_0 int SHA512_Init(SHA512_CTX *c);
+      |                           ^~~~~~~~~~~
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/openssl_help.h:595:17: warning: ‘int SHA512_Update(SHA512_CTX*, const void*, size_t)’ is deprecated: Since OpenSSL 3.0 [-Wdeprecated-declarations]
+  595 |                 SHA512_Update,
+      |                 ^~~~~~~~~~~~~
+/nix/store/f0lcjigadrvilgw2fprzdd96fw055q0b-openssl-3.6.5-dev/include/openssl/sha.h:125:27: note: declared here
+  125 | OSSL_DEPRECATEDIN_3_0 int SHA512_Update(SHA512_CTX *c,
+      |                           ^~~~~~~~~~~~~
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/openssl_help.h:596:17: warning: ‘int SHA512_Final(unsigned char*, SHA512_CTX*)’ is deprecated: Since OpenSSL 3.0 [-Wdeprecated-declarations]
+  596 |                 SHA512_Final,
+      |                 ^~~~~~~~~~~~
+/nix/store/f0lcjigadrvilgw2fprzdd96fw055q0b-openssl-3.6.5-dev/include/openssl/sha.h:127:27: note: declared here
+  127 | OSSL_DEPRECATEDIN_3_0 int SHA512_Final(unsigned char *md, SHA512_CTX *c);
+      |                           ^~~~~~~~~~~~
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/openssl_help.h:592:41: warning: ‘int SHA512_Init(SHA512_CTX*)’ is deprecated: Since OpenSSL 3.0 [-Wdeprecated-declarations]
+  592 |         return details::Sha<kSha512Size>(
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  593 |                 SHA512_CTX(),
+      |                 ~~~~~~~~~~~~~            
+  594 |                 SHA512_Init,
+      |                 ~~~~~~~~~~~~             
+  595 |                 SHA512_Update,
+      |                 ~~~~~~~~~~~~~~           
+  596 |                 SHA512_Final,
+      |                 ~~~~~~~~~~~~~            
+  597 |                 args...);
+      |                 ~~~~~~~~                 
+/nix/store/f0lcjigadrvilgw2fprzdd96fw055q0b-openssl-3.6.5-dev/include/openssl/sha.h:124:27: note: declared here
+  124 | OSSL_DEPRECATEDIN_3_0 int SHA512_Init(SHA512_CTX *c);
+      |                           ^~~~~~~~~~~
+[2/3] Building CXX object CMakeFiles/native_tdata.dir/main.cpp.o
+In file included from /home/yarik/Projects/AyuGramDesktop/Telegram/SourceFiles/logs.h:12,
+                 from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:18,
+                 from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/prefix.hpp:2,
+                 from <command-line>:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/debug_log.h:23:9: warning: ‘LOG’ redefined
+   23 | #define LOG(message) (::base::LogWriteMain(QString message))
+      |         ^~~
+/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:8:9: note: this is the location of the previous definition
+    8 | #define LOG(x) do {} while (false)
+      |         ^~~
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/debug_log.h:33:9: warning: ‘DEBUG_LOG’ redefined
+   33 | #define DEBUG_LOG(message) {\
+      |         ^~~~~~~~~
+/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:9:9: note: this is the location of the previous definition
+    9 | #define DEBUG_LOG(x) do {} while (false)
+      |         ^~~~~~~~~
+In file included from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:5:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/bytes.h:17:19: warning: ‘using gsl::byte = enum class std::byte’ is deprecated: Use std::byte instead. [-Wdeprecated-declarations]
+   17 | using type = gsl::byte;
+      |                   ^~~~
+In file included from /nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/span:21,
+                 from /nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/algorithm:21,
+                 from /nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/gsl:21,
+                 from /home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/basic_types.h:24,
+                 from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:2:
+/nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/byte:91:7: note: declared here
+   91 | using byte GSL_DEPRECATED("Use std::byte instead.") = std::byte;
+      |       ^~~~
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_base/base/bytes.h:17:23: warning: ‘using gsl::byte = enum class std::byte’ is deprecated: Use std::byte instead. [-Wdeprecated-declarations]
+   17 | using type = gsl::byte;
+      |                       ^
+/nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/byte:91:7: note: declared here
+   91 | using byte GSL_DEPRECATED("Use std::byte instead.") = std::byte;
+      |       ^~~~
+In file included from /home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/rpl.h:35,
+                 from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/../../../tg-mtproto/tests/reference-tools/prefix.hpp:11:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h: In lambda function:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h:82:35: warning: implicit capture of ‘this’ via ‘[=]’ is deprecated in C++20 [-Wdeprecated]
+   82 |                         | on_next([=](auto &&data) {
+      |                                   ^
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h:82:35: note: add explicit ‘this’ or ‘*this’ capture
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h: In lambda function:
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h:97:35: warning: implicit capture of ‘this’ via ‘[=]’ is deprecated in C++20 [-Wdeprecated]
+   97 |                         | on_next([=](auto &&data) {
+      |                                   ^
+/home/yarik/Projects/AyuGramDesktop/Telegram/lib_rpl/rpl/variable.h:97:35: note: add explicit ‘this’ or ‘*this’ capture
+In file included from /tmp/ayugram-tdata-capture/utilities.h:10,
+                 from /home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core/tests/reference-tools/main.cpp:2:
+/home/yarik/Projects/AyuGramDesktop/Telegram/SourceFiles/mtproto/mtproto_auth_key.h: At global scope:
+/home/yarik/Projects/AyuGramDesktop/Telegram/SourceFiles/mtproto/mtproto_auth_key.h:19:38: warning: ‘using gsl::byte = enum class std::byte’ is deprecated: Use std::byte instead. [-Wdeprecated-declarations]
+   19 |         using Data = std::array<gsl::byte, kSize>;
+      |                                      ^~~~
+/nix/store/lqsbn4ijf7n224dkj0fl58szj4kl3qnf-microsoft-gsl-4.2.1/include/gsl/byte:91:7: note: declared here
+   91 | using byte GSL_DEPRECATED("Use std::byte instead.") = std::byte;
+      |       ^~~~
+[3/3] Linking CXX executable native_tdata

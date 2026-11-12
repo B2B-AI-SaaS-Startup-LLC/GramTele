@@ -51,7 +51,7 @@ impl Authorization {
         self.main_dc_id = dc;
         for list in [&mut self.keys, &mut self.keys_to_destroy] {
             let count = get(r.i32())?;
-            if count < 0 || count as usize > (r.data.len() - r.position) / 260 {
+            if count < 0 {
                 return Err(Error::Invalid("bad authorization key count"));
             }
             for _ in 0..count {
@@ -87,6 +87,10 @@ impl Authorization {
         instance.add_keys_for_destroy(self.keys_to_destroy.clone());
     }
     pub fn session_unique_id(&self, test: bool) -> u64 {
-        self.user_id | if test { 1 << 56 } else { 0 }
+        if self.user_id == 0 {
+            0
+        } else {
+            self.user_id | if test { 1 << 56 } else { 0 }
+        }
     }
 }

@@ -680,6 +680,17 @@ pub fn const_time_equal(a: &[u8], b: &[u8]) -> bool {
     bool::from(a.ct_eq(b))
 }
 
+/// Variable-length PBKDF2 output used by tdata (256 bytes, unlike Pbkdf2Sha512).
+pub fn pbkdf2_sha512_into(password: &[u8], salt: &[u8], iterations: u32, out: &mut [u8]) {
+    assert!(iterations > 0);
+    pbkdf2::pbkdf2_hmac::<sha2::Sha512>(password, salt, iterations, out);
+}
+/// Legacy tdata PBKDF2-HMAC-SHA1.
+pub fn pbkdf2_sha1_into(password: &[u8], salt: &[u8], iterations: u32, out: &mut [u8]) {
+    assert!(iterations > 0);
+    pbkdf2::pbkdf2_hmac::<sha1::Sha1>(password, salt, iterations, out);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -895,15 +906,4 @@ mod tests {
         assert_eq!(encrypted.get_bytes(), vec![0x0A, 0xE6]);
         assert_eq!(BigNum::mod_exp(&num(2), &num(3), &n).get_bytes(), vec![8]);
     }
-}
-
-/// Variable-length PBKDF2 output used by tdata (256 bytes, unlike Pbkdf2Sha512).
-pub fn pbkdf2_sha512_into(password: &[u8], salt: &[u8], iterations: u32, out: &mut [u8]) {
-    assert!(iterations > 0);
-    pbkdf2::pbkdf2_hmac::<sha2::Sha512>(password, salt, iterations, out);
-}
-/// Legacy tdata PBKDF2-HMAC-SHA1.
-pub fn pbkdf2_sha1_into(password: &[u8], salt: &[u8], iterations: u32, out: &mut [u8]) {
-    assert!(iterations > 0);
-    pbkdf2::pbkdf2_hmac::<sha1::Sha1>(password, salt, iterations, out);
 }

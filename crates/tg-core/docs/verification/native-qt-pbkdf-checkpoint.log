@@ -1,0 +1,10 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/tdata' is dirty
+   Compiling tg-core v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.31s
+     Running tests/tdata.rs (/home/yarik/Projects/ayugram-rs/target/debug/deps/tdata-d1cdb455d692e9df)
+
+running 1 test
+test original_qt_stream_and_both_pbkdf_variants ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 18.20s
+

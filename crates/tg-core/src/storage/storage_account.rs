@@ -116,8 +116,17 @@ impl Account {
         Ok(self.read_mtp_config().ok().flatten())
     }
     pub fn legacy_start(&mut self, passcode: &[u8]) -> Result<()> {
-        self.read_map_with(None, passcode)?;
-        self.read_mtp_data()
+        match self.read_map_with(None, passcode) {
+            Ok(()) => {
+                let _ = self.read_mtp_data();
+                Ok(())
+            }
+            Err(Error::IncorrectPasscode) => Err(Error::IncorrectPasscodeLegacy),
+            Err(_) => {
+                assert!(self.local_key.is_none());
+                Ok(())
+            }
+        }
     }
     pub fn read_map_with(&mut self, key: Option<Arc<AuthKey>>, passcode: &[u8]) -> Result<()> {
         let file = read_file("map", &self.base_path)?;
@@ -132,7 +141,8 @@ impl Account {
                     return Err(Error::Invalid("bad salt in map file"));
                 }
                 let inner =
-                    decrypt_local(&key_encrypted, &create_legacy_local_key(passcode, &salt))?;
+                    decrypt_local(&key_encrypted, &create_legacy_local_key(passcode, &salt))
+                        .map_err(|_| Error::IncorrectPasscode)?;
                 let raw = inner
                     .stream
                     .0
@@ -144,7 +154,8 @@ impl Account {
                 Arc::new(AuthKey::local(data))
             }
         };
-        let inner = decrypt_local(&map_encrypted, &key)?;
+        let inner = decrypt_local(&map_encrypted, &key)
+            .map_err(|_| Error::Invalid("could not decrypt map"))?;
         self.map = AccountMap::parse(inner.stream.0[4..].to_vec())?;
         self.local_key = Some(key);
         self.old_map_version = file.version;
@@ -188,15 +199,15 @@ impl Account {
             .ok_or(Error::Invalid("local key missing"))?;
         let file = read_encrypted_file(&to_file_part(self.data_name_key), &self.root, key)?;
         let mut r = file.reader();
+        let mut modern = Vec::new();
+        let mut legacy = Authorization::default();
         while !r.at_end() {
             match check_stream_status(r.i32())? {
-                0x4b => self
-                    .authorization
-                    .set_mtp_authorization(&check_stream_status(r.bytes())?)?,
+                0x4b => modern = check_stream_status(r.bytes())?,
                 0 => {
                     let dc = check_stream_status(r.i32())?;
                     let data = check_stream_status(r.raw(256))?.try_into().unwrap();
-                    self.authorization.keys.push(Arc::new(AuthKey::new(
+                    legacy.keys.push(Arc::new(AuthKey::new(
                         tg_mtproto::mtproto_auth_key::KeyType::ReadFromFile,
                         dc,
                         data,
@@ -204,13 +215,30 @@ impl Account {
                     )));
                 }
                 1 => {
-                    self.authorization.user_id = check_stream_status(r.i32())? as u64;
-                    self.authorization.main_dc_id = check_stream_status(r.i32())?;
+                    legacy.user_id = check_stream_status(r.i32())? as u64;
+                    legacy.main_dc_id = check_stream_status(r.i32())?;
                 }
                 _ => return Err(Error::Invalid("legacy ReadSetting block deferred")),
             }
         }
+        self.apply_read_authorization_context(&modern, legacy)?;
         Ok(())
+    }
+    pub fn apply_read_authorization_context(
+        &mut self,
+        modern: &[u8],
+        legacy: Authorization,
+    ) -> Result<()> {
+        if !modern.is_empty() {
+            self.authorization.set_mtp_authorization(modern)
+        } else {
+            self.authorization.keys.extend(legacy.keys);
+            if legacy.main_dc_id != 0 {
+                self.authorization.main_dc_id = legacy.main_dc_id;
+                self.authorization.user_id = legacy.user_id;
+            }
+            Ok(())
+        }
     }
     pub fn write_mtp_config(
         &self,
@@ -218,16 +246,14 @@ impl Account {
         manager: &mut WriteManager,
         random: &mut impl Random,
     ) -> Result<()> {
+        let key = self
+            .local_key
+            .as_ref()
+            .ok_or(Error::Invalid("local key missing"))?;
         let mut inner = EncryptedDescriptor::new(0);
         inner.stream.bytes(&config.serialize());
         let mut file = FileWriteDescriptor::new("config", &self.base_path);
-        file.write_encrypted(
-            &mut inner,
-            self.local_key
-                .as_ref()
-                .ok_or(Error::Invalid("local key missing"))?,
-            random,
-        );
+        file.write_encrypted(&mut inner, key, random);
         file.finish(manager, false)
     }
     pub fn read_mtp_config(&self) -> Result<Option<Config>> {
@@ -240,5 +266,54 @@ impl Account {
         )?;
         let mut r = file.reader();
         Ok(Config::from_serialized(&check_stream_status(r.bytes())?))
+    }
+}
+
+/// Non-UI map scheduling. The caller supplies the same TimerHost as its main queue.
+pub struct AccountWrites {
+    timer: tg_base::timer::Timer,
+    due: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    changed: bool,
+}
+impl AccountWrites {
+    pub fn new(host: &std::rc::Rc<tg_base::timer::TimerHost>) -> Self {
+        let due = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let fire = due.clone();
+        Self {
+            timer: tg_base::timer::Timer::in_host(
+                host,
+                Some(std::rc::Rc::new(move || {
+                    fire.store(true, std::sync::atomic::Ordering::Release)
+                })),
+            ),
+            due,
+            changed: false,
+        }
+    }
+    pub fn write_map_delayed(&mut self) {
+        self.changed = true;
+        self.timer.call_once(1000);
+    }
+    pub fn write_map_queued(&mut self) {
+        self.changed = true;
+        let due = self.due.clone();
+        tg_runtime::on_main(move || due.store(true, std::sync::atomic::Ordering::Release));
+    }
+    pub fn process(
+        &mut self,
+        account: &Account,
+        manager: &mut WriteManager,
+        random: &mut impl Random,
+    ) -> Result<bool> {
+        if !self.due.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            return Ok(false);
+        }
+        self.timer.cancel();
+        if !self.changed {
+            return Ok(false);
+        }
+        self.changed = false;
+        account.write_map(manager, random)?;
+        Ok(true)
     }
 }

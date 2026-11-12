@@ -7,7 +7,7 @@ use crate::main::{
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
-    sync::{mpsc, Arc},
+    sync::Arc,
 };
 use tg_base::qt_stream::Reader;
 use tg_mtproto::{core_types::Random, mtproto_auth_key::AuthKey};
@@ -15,6 +15,7 @@ pub fn compute_key_name(data_name: &str) -> String {
     format!("key_{data_name}")
 }
 pub struct Domain {
+    pub(crate) write_accounts_scheduled: bool,
     pub root: PathBuf,
     pub data_name: String,
     pub owner: MainDomain,
@@ -24,11 +25,12 @@ pub struct Domain {
     pub passcode_key_encrypted: Vec<u8>,
     old_version: i32,
     has_passcode: bool,
-    changes: Vec<mpsc::Sender<()>>,
+    changes: tg_rpl::EventStream,
 }
 impl Domain {
     pub fn new(root: &Path, data_name: &str) -> Self {
         Self {
+            write_accounts_scheduled: false,
             root: root.into(),
             data_name: data_name.into(),
             owner: MainDomain::default(),
@@ -38,7 +40,7 @@ impl Domain {
             passcode_key_encrypted: vec![],
             old_version: 0,
             has_passcode: false,
-            changes: vec![],
+            changes: tg_rpl::EventStream::new(),
         }
     }
     /// Strict reader: no implicit destructive reset if a synthetic/storage input is damaged.
@@ -52,17 +54,24 @@ impl Domain {
             return Err(Error::Invalid("bad salt in info file"));
         }
         let passkey = create_local_key(passcode, &salt);
-        let decrypted = decrypt_local(&enc, &passkey)?;
+        self.passcode_key = Some(passkey.clone());
+        let decrypted = decrypt_local(&enc, &passkey).map_err(|_| Error::IncorrectPasscode)?;
         let key: [u8; 256] = decrypted.stream.0[4..]
             .try_into()
             .map_err(|_| Error::Invalid("bad local key size"))?;
         let local = Arc::new(AuthKey::local(key));
-        let decrypted = decrypt_local(&info, &local)?;
+        self.local_key = Some(local.clone());
+        self.passcode_key_salt = salt.clone();
+        self.passcode_key_encrypted = enc.clone();
+        self.has_passcode = !passcode.is_empty();
+        let decrypted =
+            decrypt_local(&info, &local).map_err(|_| Error::Invalid("could not decrypt info"))?;
         let mut r = Reader::new(&decrypted.stream.0[4..]);
         let count = check_stream_status(r.i32())?;
         if !(1..=PREMIUM_MAX_ACCOUNTS).contains(&count) {
             return Err(Error::Invalid("bad accounts count"));
         }
+        self.old_version = file.version;
         let mut tried = BTreeSet::new();
         let mut sessions = BTreeSet::new();
         let mut owner = MainDomain::default();
@@ -119,8 +128,11 @@ impl Domain {
                 let mut account =
                     Account::new(&self.root, &compose_data_string(&self.data_name, 0));
                 match account.legacy_start(passcode) {
-                    Ok(()) => self.start_with_single_account(passcode, account, random, manager),
-                    Err(Error::IncorrectPasscode) => Err(Error::IncorrectPasscode),
+                    Ok(()) => {
+                        self.old_version = account.old_map_version;
+                        self.start_with_single_account(passcode, account, random, manager)
+                    }
+                    Err(Error::IncorrectPasscodeLegacy) => Err(Error::IncorrectPasscodeLegacy),
                     _ => self.start_from_scratch(random, manager),
                 }
             }
@@ -221,7 +233,7 @@ impl Domain {
     ) -> Result<()> {
         self.encrypt_local_key(passcode, random)?;
         self.write_accounts(manager, random)?;
-        self.changes.retain(|tx| tx.send(()).is_ok());
+        self.changes.fire(());
         Ok(())
     }
     pub fn old_version(&self) -> i32 {
@@ -233,9 +245,7 @@ impl Domain {
     pub fn has_local_passcode(&self) -> bool {
         self.has_passcode
     }
-    pub fn local_passcode_changed(&mut self) -> mpsc::Receiver<()> {
-        let (tx, rx) = mpsc::channel();
-        self.changes.push(tx);
-        rx
+    pub fn local_passcode_changed(&self) -> tg_rpl::Producer {
+        self.changes.events()
     }
 }

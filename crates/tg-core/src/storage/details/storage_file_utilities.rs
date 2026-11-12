@@ -22,6 +22,7 @@ pub enum Error {
     Io(io::Error),
     Invalid(&'static str),
     IncorrectPasscode,
+    IncorrectPasscodeLegacy,
     Missing,
 }
 impl From<io::Error> for Error {
@@ -192,10 +193,12 @@ pub fn read_file(name: &str, base: &Path) -> Result<FileReadDescriptor> {
         paths = vec![path('0'), path('1')];
         if !paths[0].exists() {
             paths.remove(0);
-        } else if paths[1].exists()
-            && paths[0].metadata()?.modified()? < paths[1].metadata()?.modified()?
-        {
-            paths.swap(0, 1);
+        } else if paths[1].exists() {
+            if paths[0].metadata()?.modified()? < paths[1].metadata()?.modified()? {
+                paths.swap(0, 1);
+            }
+        } else {
+            paths.pop();
         }
     }
     for (i, p) in paths.iter().enumerate() {
@@ -228,6 +231,7 @@ pub struct WriteEntry {
 }
 #[derive(Default)]
 pub struct WriteManager {
+    weak: Option<tg_runtime::WeakOnThread<WriteManager>>,
     scheduled: VecDeque<WriteEntry>,
     finished: bool,
 }
@@ -238,6 +242,20 @@ impl WriteManager {
             *old = entry;
         } else {
             self.scheduled.push_back(entry);
+        }
+        self.schedule_write();
+    }
+    pub fn schedule_write(&self) {
+        if let Some(weak) = &self.weak {
+            weak.with(Self::write_scheduled);
+        }
+    }
+    pub fn write_scheduled(&mut self) {
+        if let Err(error) = self.write_one_scheduled_now() {
+            eprintln!("tdata write: {error:?}");
+        }
+        if !self.scheduled.is_empty() {
+            self.schedule_write();
         }
     }
     pub fn write_sync(&mut self, entry: WriteEntry) -> Result<()> {
@@ -254,16 +272,23 @@ impl WriteManager {
         }
     }
     pub fn write_sync_all(&mut self) -> Result<()> {
-        while self.write_one_scheduled_now()? {}
-        Ok(())
+        let mut error = None;
+        while !self.scheduled.is_empty() {
+            if let Err(e) = self.write_one_scheduled_now() {
+                if error.is_none() {
+                    error = Some(e);
+                }
+            }
+        }
+        error.map_or(Ok(()), Err)
     }
     pub fn sync(&mut self) -> Result<()> {
         self.write_sync_all()
     }
     pub fn stop(&mut self) -> Result<()> {
-        self.sync()?;
+        let result = self.sync();
         self.finished = true;
-        Ok(())
+        result
     }
     pub fn write_now(&self, entry: WriteEntry) -> Result<()> {
         use std::io::Write;
@@ -316,12 +341,14 @@ impl WriteManager {
 pub struct FileWriteDescriptor {
     pub stream: Writer,
     base: PathBuf,
+    finished: bool,
 }
 impl FileWriteDescriptor {
     pub fn new(name: &str, base: &Path) -> Self {
         Self {
             stream: Writer::default(),
             base: base.join(name),
+            finished: false,
         }
     }
     pub fn write_data(&mut self, data: Option<&[u8]>) {
@@ -335,9 +362,10 @@ impl FileWriteDescriptor {
     ) {
         self.write_data(Some(&prepare_encrypted(data, key, random)));
     }
-    pub fn finish(self, manager: &mut WriteManager, sync: bool) -> Result<()> {
+    pub fn finish(mut self, manager: &mut WriteManager, sync: bool) -> Result<()> {
+        self.finished = true;
         let entry = WriteEntry {
-            base: self.base,
+            base: self.base.clone(),
             data: encode_file(&self.stream.0, APP_VERSION),
         };
         if sync {
@@ -345,6 +373,68 @@ impl FileWriteDescriptor {
         } else {
             manager.write(entry);
             Ok(())
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct AsyncWriteManager {
+    manager: Option<tg_runtime::ObjectOnThread<WriteManager>>,
+    finished: bool,
+}
+impl AsyncWriteManager {
+    fn manager(&mut self) -> &tg_runtime::ObjectOnThread<WriteManager> {
+        assert!(!self.finished);
+        self.manager.get_or_insert_with(|| {
+            tg_runtime::ObjectOnThread::new_with_weak(|weak| WriteManager {
+                weak: Some(weak),
+                ..Default::default()
+            })
+        })
+    }
+    pub fn write(&mut self, entry: WriteEntry) {
+        self.manager().with(move |m| m.write(entry));
+    }
+    pub fn write_sync(&mut self, entry: WriteEntry) -> Result<()> {
+        self.manager()
+            .with_sync(move |m| m.write_sync(entry))
+            .ok_or(Error::Invalid("write manager stopped"))?
+    }
+    pub fn sync(&mut self) -> Result<()> {
+        match &self.manager {
+            Some(m) => m
+                .with_sync(WriteManager::write_sync_all)
+                .ok_or(Error::Invalid("write manager stopped"))?,
+            None => Ok(()),
+        }
+    }
+    pub fn stop(&mut self) -> Result<()> {
+        let result = self.sync();
+        self.manager = None;
+        self.finished = true;
+        result
+    }
+}
+fn global_manager() -> &'static std::sync::Mutex<AsyncWriteManager> {
+    static MANAGER: std::sync::OnceLock<std::sync::Mutex<AsyncWriteManager>> =
+        std::sync::OnceLock::new();
+    MANAGER.get_or_init(Default::default)
+}
+pub fn sync() -> Result<()> {
+    global_manager().lock().unwrap().sync()
+}
+pub fn finish() -> Result<()> {
+    global_manager().lock().unwrap().stop()
+}
+impl Drop for FileWriteDescriptor {
+    fn drop(&mut self) {
+        if !self.finished {
+            let entry = WriteEntry {
+                base: self.base.clone(),
+                data: encode_file(&self.stream.0, APP_VERSION),
+            };
+            global_manager().lock().unwrap().write(entry);
+            self.finished = true;
         }
     }
 }
