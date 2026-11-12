@@ -290,15 +290,16 @@ base-runtime/codegen не изменялись. Cargo.lock не добавлял
 | Портированные тесты lib_rpl | Да | Все 28 секций оригинала и собственные tests/doctests проходят в workspace. |
 | Портированные тесты lib_base | Да, для перенесённой части | Все 14 исходных секций + tests переносимых модулей; tg-base 231 проверка, 0 ошибок. Графические/платформенные файлы ниже остаются partial/todo. |
 | TL: независимые образцы | Да, для набора покрытых форм | 37 reference_bytes tests, boundaries, flags/flags2, вложенные constructors, bytes/vector, Ayu hooks. |
-| TL: каждый тип против эталонного C++ исполнения | **Полностью не подтверждён** | all_definitions проходит всю схему и optional modes, но часть образцов построена по общей metadata парсера; это не native C++ oracle каждого типа. Независимый запуск оригинального TL writer на всех типах ещё нужен. |
+| TL: каждый тип против эталонного C++ исполнения | **Да, на конечном наборе образцов** | Оригинальные Python generators + lib_tl собраны отдельно; 1697 constructors + 823 methods × 6 режимов = 15 120 образцов, плюс 3 образца встроенного vector. Rust write/read/rewrite совпали побайтно. Recipe не зависит от tg-tl-gen; fixtures и воспроизводимый CMake в tg-scheme/tests. |
 | tg-runtime | Переносимая часть да; есть partial | 56 tests и workspace checks; остаются reactive bridges и lifetime потока, см. список. |
 | tg-codegen common/style/lang/emoji | Переносимая обработка и Rust-выдача да; графика отложена | Все настоящие входы разобраны, вся выдача компилируется; native эталоны таблиц/значений совпали, 33 теста. Image backend/sprites — этап 5. |
 | Обязательные проверки на едином Rust | Да | Rust 1.95.0 закреплён для nix-shell/nix develop/CI; все три команды exit 0, 457 тестов. |
 
-**Этап 1 нельзя объявить безусловно закрытым целиком:** переносимые части и их
-проверки готовы, но строгий native TL criterion для каждого типа не доказан,
-а отложенные файлы остаются в реестре. Следующий MTProto этап в этой работе
-не начинался. Ниже полный список всех файлов с stage=1 и status=partial/todo
+**Критерий готовности этапа 1 выполнен:** портированные тесты lib_rpl/lib_base
+проходят; каждое определение TL проверено исполнением оригинального C++ writer
+на описанном конечном наборе значений. Отложенные платформенные и графические
+части остаются в реестре для соответствующих этапов. Ниже полный список
+всех файлов с stage=1 и status=partial/todo
 после этой задачи: **174 файла**. Номер возврата — планируемый этап работы,
 столбец stage в ledger сохраняет исходную принадлежность файлу этапа 1.
 
@@ -476,3 +477,24 @@ base-runtime/codegen не изменялись. Cargo.lock не добавлял
 - `lib_crl/crl/crl_object_on_thread.cpp` → этап **4** → Согласовать lifetime фонового потока: в Rust завершается после drop объекта, C++ оставляет его навсегда; runtime tests.
 - `lib_crl/crl/crl_object_on_thread.h` → этап **4** → Согласовать lifetime фонового потока: в Rust завершается после drop объекта, C++ оставляет его навсегда; runtime tests.
 - `lib_crl/crl/crl_on_main.h` → этап **5** → Обёртка callback subscription on_main_update_requests в rpl::producer и связь с оконным loop.
+
+## Native TL reference: закрытие критерия этапа 1
+
+Оригинальная схема слоя 229 сгенерирована неизменёнными generate_tl.py и
+codegen_scheme.py, скомпилирована вместе с lib_tl вне клона в
+`/tmp/ayugram-tl-reference`. Проверены все 2520 конкретных определений
+(1697 constructors, 823 methods) и встроенный полиморфный vector: 15 123
+C++ образца. Расхождений нет: Rust write совпадает с C++, deserialize_exact
+и повторная запись сохраняют байты. Шесть режимов покрывают absent/present,
+flags2, длины 0/253/254/3/1, empty/nonempty vector, boxed/bare; для `!X`
+использован help.getConfig. Это не полный перебор combinations всех флагов
+и вложенных alternatives. Полиморфные встроенные числовые/string примитивы
+покрыты в составе полей; UTF-8 и семантическая допустимость данных на сервере
+не являются предметом этого сравнения.
+
+Описание значений независимо от tg-tl-gen: отдельный raw-TL Python reader,
+checked-in JSON и два типизированных builder. Native writer не заменяется
+алгоритмом стенда. Binary fixtures, manifest SHA-256, CMake, capture.sh и
+границы проверки: `crates/tg-scheme/tests/reference-tools/README.md`.
+Удалены codegen worktree и полностью влитая port/tg-codegen; stash
+`base-crypto before integrating main` сохранён.

@@ -1,0 +1,23 @@
+{
+  "source_commit": "0f2a31bb420de98f331990432265b131b8d836b5",
+  "schema_definitions": 2520,
+  "constructors": 1697,
+  "methods": 823,
+  "records": 15120,
+  "builtin_vector_records": 3,
+  "sha256": {
+    "SourceFiles/mtproto/scheme/api.tl": "7655504c25a5d3a368e7729d3e9e64afffcacbcb54ec85508c60f0472064b617",
+    "SourceFiles/mtproto/scheme/mtproto.tl": "40c10255afb6cfcbcfc190a457a53b66ec9e410f6418cd97cc4c276709a739a9",
+    "SourceFiles/codegen/scheme/codegen_scheme.py": "ed09806931cc77f917fd83528f019c8c0196ee6b5e9b47df16d0ca646fdbdba5",
+    "lib_tl/tl/generate_tl.py": "1a253bb1a00c8ded59feb639f326e417d498849d7eda648f7a29077c431be4af",
+    "lib_tl/tl/tl_basic_types.h": "ed0e2bbe1f45ed793e7bce760bee03f9374ccf8b0e813e31dc9d8db6682dad7e",
+    "lib_tl/tl/tl_basic_types.cpp": "87e4498e7db4b5889fbe6f65217f79c0eb5bcf9033417da5f0c84c4a714dd177",
+    "SourceFiles/mtproto/core_types.h": "1079596d8ee29ffbdbfa8fc0ef27afca6e0818a46855fdd90bab2ac040a6db8b",
+    "crates/tg-scheme/tests/fixtures/native_tl/recipe.json": "14f46aa1e1ae4e9e94945ad6b6eb72cfc13e6dc775844a7f89bfde4f3d408313",
+    "crates/tg-scheme/tests/fixtures/native_tl/reference.bin": "6592dd675d3a886dc191fb18547ba0fca7fee3e91d76039f39c3d1ca90496084",
+    "crates/tg-scheme/tests/fixtures/native_tl/vectors.bin": "9b9bd8d6c603c5aa8e4c5639f5c81b834ef94ce4e9e4a2176844d06fb13d1002",
+    "crates/tg-scheme/tests/reference-tools/describe.py": "725caafd2e991b5925b71d9772745d57237ee2bb5ff50eca28dace9416ab8bb8",
+    "crates/tg-scheme/tests/reference-tools/emit.py": "24f591e3ed880e7c64665952db1097a674a0e476c72f6f5c615227a58597da85",
+    "crates/tg-scheme/tests/reference-tools/vectors.cpp": "113569eeb39233446215bcbfb3d9a8ac3ef2d3922fbe987ffe096c933eb2fb82"
+  }
+}
