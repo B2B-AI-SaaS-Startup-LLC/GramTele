@@ -134,3 +134,9 @@ pub fn decrypt_message(
         bad_time,
     })
 }
+
+mod machine;
+pub use machine::{
+    compute_app_version, log_ids_vector, AppDistribution, ClientInfo, ConnectionSpec, HandleResult,
+    SessionClock, SessionPrivate, TransportAction, CONNECTED, CONNECTING, DISCONNECTED,
+};

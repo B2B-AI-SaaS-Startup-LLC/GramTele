@@ -153,7 +153,11 @@ fn original_handle_received_envelope_checks() {
             .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
             .collect();
         fixture = &fixture[20..];
-        let packet = tg_tl::bytes_to_primes(&fixture[..header[1] as usize * 4]);
+        let packet = if header[0] == 18 {
+            vec![0; 16 * 1024 * 1024 / 4 + 1]
+        } else {
+            tg_tl::bytes_to_primes(&fixture[..header[1] as usize * 4])
+        };
         fixture = &fixture[header[1] as usize * 4..];
         let expected = tg_tl::bytes_to_primes(&fixture[..header[4] as usize * 4]);
         fixture = &fixture[header[4] as usize * 4..];
@@ -170,5 +174,5 @@ fn original_handle_received_envelope_checks() {
         }
         count += 1;
     }
-    assert_eq!(count, 18);
+    assert_eq!(count, 19);
 }

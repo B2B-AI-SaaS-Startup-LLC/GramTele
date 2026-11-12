@@ -1,0 +1,141 @@
+# Карта перевода сессии
+
+Оригинал: `0f2a31bb420de98f331990432265b131b8d836b5`. Определения функций, inline методы заголовка и четыре свободных helper учитываются один раз. Карта в работе до завершения всех указанных проверок.
+
+| Оригинал | Назначение | Rust | Проверка |
+|---|---|---|---|
+| `session_private.cpp:156 SessionPrivate::SessionPrivate` | Создаёт автомат, таймеры и запускает выбор соединений | `SessionPrivate::new` | `duplex_server_creates_persistent_and_temp_key_retries_binds_and_delivers_rpc` |
+| `session_private.cpp:188 SessionPrivate::~SessionPrivate` | Освобождает создание ключа и соединения | `Drop for SessionPrivate` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session_private.cpp:196 SessionPrivate::appendTestConnection` | Назначает приоритет и запускает кандидата соединения | `SessionPrivate::append_test_connection` | `connection_priority_failover_options_and_cdn_gating` |
+| `session_private.cpp:254 SessionPrivate::getProtocolDcId` | Вычисляет test/media/temporary идентификатор протокола | `SessionPrivate::get_protocol_dc_id` | `source_log_version_timezone_and_protocol_dc_rules` |
+| `session_private.cpp:267 SessionPrivate::checkSentRequests` | Запрашивает состояние давно отправленных запросов | `SessionPrivate::check_sent_requests` | `virtual_sent_checks_container_expiry_and_ping_timeout` |
+| `session_private.cpp:302 SessionPrivate::clearOldContainers` | Удаляет старые контейнеры и повторяет их сообщения | `SessionPrivate::clear_old_containers` | `virtual_sent_checks_container_expiry_and_ping_timeout` |
+| `session_private.cpp:338 SessionPrivate::destroyAllConnections` | Останавливает обмен ключами, кандидатов и выбранное соединение | `SessionPrivate::destroy_all_connections` | `connection_priority_failover_options_and_cdn_gating` |
+| `session_private.cpp:347 SessionPrivate::cdnConfigChanged` | Продолжает подключение после загрузки ключей CDN | `SessionPrivate::cdn_config_changed` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:351 SessionPrivate::getShiftedDcId` | Возвращает сдвинутый идентификатор DC | `SessionPrivate::get_shifted_dc_id` | `source_log_version_timezone_and_protocol_dc_rules` |
+| `session_private.cpp:355 SessionPrivate::dcOptionsChanged` | Сбрасывает backoff при обновлении адресов DC | `SessionPrivate::dc_options_changed` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:360 SessionPrivate::getState` | Возвращает состояние или оставшееся время повтора | `SessionPrivate::get_state` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:374 SessionPrivate::transport` | Возвращает название выбранного транспорта | `SessionPrivate::transport` | `initial_salt_ping_sequence_and_rpc_delivery` |
+| `session_private.cpp:384 SessionPrivate::setState` | Условно меняет состояние и ставит таймер повтора | `SessionPrivate::set_state` | `initial_salt_ping_sequence_and_rpc_delivery` |
+| `session_private.cpp:408 SessionPrivate::resetSession` | Меняет session_id и уведомляет главный поток | `SessionPrivate::reset_session` | `gzip_container_budget_parse_errors_and_replay_window` |
+| `session_private.cpp:418 SessionPrivate::changeSessionId` | Выбирает новый session_id и очищает seq/ack/received состояние | `SessionPrivate::change_session_id` | `gzip_container_budget_parse_errors_and_replay_window` |
+| `session_private.cpp:435 SessionPrivate::nextRequestSeqNumber` | Выдаёт чётный или нечётный seq_no | `SessionPrivate::next_request_seq_number` | `container_limits_invoke_after_layer_and_sequence_wrap` |
+| `session_private.cpp:441 SessionPrivate::realDcTypeChanged` | Обновляет тип DC и сообщает о смене | `SessionPrivate::real_dc_type_changed` | `key_creation_variants_cdn_and_data_owner_contract` |
+| `session_private.cpp:450 SessionPrivate::markSessionAsStarted` | Однократно помечает первую отправку новой сессии | `SessionPrivate::mark_session_as_started` | `container_limits_invoke_after_layer_and_sequence_wrap` |
+| `session_private.cpp:458 SessionPrivate::prepareToSend` | Назначает msg_id и seq_no либо сохраняет их при повторе | `SessionPrivate::prepare_to_send` | `container_limits_invoke_after_layer_and_sequence_wrap` |
+| `session_private.cpp:483 SessionPrivate::replaceMsgId` | Заменяет идентификатор во всех индексах и контейнерах | `SessionPrivate::replace_msg_id` | `container_limits_invoke_after_layer_and_sequence_wrap` |
+| `session_private.cpp:536 SessionPrivate::placeToContainer` | Добавляет заголовок и тело сообщения в контейнер | `SessionPrivate::place_to_container` | `container_limits_invoke_after_layer_and_sequence_wrap` |
+| `session_private.cpp:553 SessionPrivate::prepareInitParams` | Нормализует и округляет tz_offset до 15 минут | `SessionPrivate::prepare_init_params` | `source_log_version_timezone_and_protocol_dc_rules` |
+| `session_private.cpp:576 SessionPrivate::tryToSend` | Собирает служебные сообщения, запросы, обёртки и контейнеры | `SessionPrivate::try_to_send` | `container_limits_invoke_after_layer_and_sequence_wrap` |
+| `session_private.cpp:998 SessionPrivate::retryByTimer` | Увеличивает backoff и снова подключается | `SessionPrivate::retry_by_timer` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1009 SessionPrivate::restartNow` | Сбрасывает backoff для немедленного перезапуска | `SessionPrivate::restart_now` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1015 SessionPrivate::connectToServer` | Выбирает IPv4/IPv6, TCP/HTTP, прокси и создание ключа | `SessionPrivate::connect_to_server` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1120 SessionPrivate::restart` | Закрывает соединение и ставит повтор с нужной задержкой | `SessionPrivate::restart` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1140 SessionPrivate::onSentSome` | Выставляет таймаут ожидания ответа с учётом размера | `SessionPrivate::on_sent_some` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1163 SessionPrivate::onReceivedSome` | Сбрасывает таймаут и уточняет длительность ожидания | `SessionPrivate::on_received_some` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1183 SessionPrivate::markConnectionOld` | Возвращает базовый таймаут старому соединению | `SessionPrivate::mark_connection_old` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1190 SessionPrivate::sendPingByTimer` | Повторяет планирование ping либо перезапускает зависшее соединение | `SessionPrivate::send_ping_by_timer` | `virtual_sent_checks_container_expiry_and_ping_timeout` |
+| `session_private.cpp:1209 SessionPrivate::sendPingForce` | Запрашивает немедленный ping, если предыдущий завершён | `SessionPrivate::send_ping_force` | `virtual_sent_checks_container_expiry_and_ping_timeout` |
+| `session_private.cpp:1218 SessionPrivate::waitReceivedFailed` | Увеличивает receive timeout и переподключается | `SessionPrivate::wait_received_failed` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1242 SessionPrivate::waitConnectedFailed` | Увеличивает connect timeout и повторяет попытку | `SessionPrivate::wait_connected_failed` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1258 SessionPrivate::waitBetterFailed` | Выбирает лучший уже подключённый транспорт | `SessionPrivate::wait_better_failed` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1262 SessionPrivate::connectingTimedOut` | Сообщает кандидатам об истечении срока и отключается | `SessionPrivate::connecting_timed_out` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1269 SessionPrivate::doDisconnect` | Закрывает транспорт и выставляет Disconnected | `SessionPrivate::do_disconnect` | `virtual_timer_backoff_connection_selection_and_time_adjustment` |
+| `session_private.cpp:1274 SessionPrivate::requestCDNConfig` | Ставит запрос ключей CDN в главный поток | `SessionPrivate::request_cdn_config` | `connection_priority_failover_options_and_cdn_gating` |
+| `session_private.cpp:1280 SessionPrivate::handleReceived` | Проверяет конверт, salt, received IDs и результат диспетчеризации | `SessionPrivate::handle_received` | `initial_salt_ping_sequence_and_rpc_delivery; native `original_handle_received_envelope_checks` (конверт до dispatcher)` |
+| `session_private.cpp:1460 SessionPrivate::handleOneReceived` | Разбирает контейнеры, gzip, RPC и служебные ответы | `SessionPrivate::handle_one_received` | `initial_salt_ping_sequence_and_rpc_delivery` |
+| `session_private.cpp:2033 SessionPrivate::handleBindResponse` | Обрабатывает успешную и неуспешную привязку временного ключа | `SessionPrivate::handle_bind_response` | `binding_success_failure_persistent_age_and_key_destruction` |
+| `session_private.cpp:2063 SessionPrivate::ungzip` | Распаковывает gzip с общим бюджетом и проверкой выравнивания | `SessionPrivate::ungzip` | `gzip_container_budget_parse_errors_and_replay_window` |
+| `session_private.cpp:2139 SessionPrivate::requestsFixTimeSalt` | Исправляет время и salt по известному отправленному сообщению | `SessionPrivate::requests_fix_time_salt` | `state_requests_reply_info_and_cancellation` |
+| `session_private.cpp:2153 SessionPrivate::correctUnixtimeByFastRequest` | Уточняет время только по достаточно быстрому запросу | `SessionPrivate::correct_unixtime_by_fast_request` | `state_requests_reply_info_and_cancellation` |
+| `session_private.cpp:2177 SessionPrivate::correctUnixtimeWithBadLocal` | Принудительно исправляет локальное время | `SessionPrivate::correct_unixtime_with_bad_local` | `state_requests_reply_info_and_cancellation` |
+| `session_private.cpp:2182 SessionPrivate::requestsAcked` | Обрабатывает подтверждения и сохраняет ожидающие RPC ответы | `SessionPrivate::requests_acked` | `state_requests_reply_info_and_cancellation` |
+| `session_private.cpp:2263 SessionPrivate::handleMsgsStates` | Отменяет либо планирует повтор по состояниям сообщений | `SessionPrivate::handle_msgs_states` | `state_requests_reply_info_and_cancellation` |
+| `session_private.cpp:2308 SessionPrivate::clearSpecialMsgId` | Сбрасывает специальный идентификатор ping или bind | `SessionPrivate::clear_special_msg_id` | `state_requests_reply_info_and_cancellation` |
+| `session_private.cpp:2317 SessionPrivate::resend` | Возвращает запрос либо содержимое контейнера в очередь | `SessionPrivate::resend` | `state_requests_reply_info_and_cancellation` |
+| `session_private.cpp:2354 SessionPrivate::resendAll` | Возвращает все отправленные запросы в очередь | `SessionPrivate::resend_all` | `state_requests_reply_info_and_cancellation` |
+| `session_private.cpp:2374 SessionPrivate::onConnected` | Ждёт более приоритетного кандидата либо принимает текущего | `SessionPrivate::on_connected` | `connection_priority_failover_options_and_cdn_gating` |
+| `session_private.cpp:2409 SessionPrivate::onDisconnected` | Удаляет отключившегося кандидата и выбирает замену | `SessionPrivate::on_disconnected` | `connection_priority_failover_options_and_cdn_gating` |
+| `session_private.cpp:2421 SessionPrivate::confirmBestConnection` | Выбирает первый из лучших подключённых кандидатов | `SessionPrivate::confirm_best_connection` | `connection_priority_failover_options_and_cdn_gating` |
+| `session_private.cpp:2445 SessionPrivate::removeTestConnection` | Удаляет одного кандидата по идентификатору | `SessionPrivate::remove_test_connection` | `connection_priority_failover_options_and_cdn_gating` |
+| `session_private.cpp:2455 SessionPrivate::checkAuthKey` | Выбирает текущий, временный либо уничтожаемый ключ | `SessionPrivate::check_auth_key` | `initial_salt_ping_sequence_and_rpc_delivery` |
+| `session_private.cpp:2466 SessionPrivate::updateAuthKey` | Применяет новое состояние ключей DC | `SessionPrivate::update_auth_key` | `connection_priority_failover_options_and_cdn_gating` |
+| `session_private.cpp:2477 SessionPrivate::setCurrentKeyId` | При смене keyId создаёт новый session_id | `SessionPrivate::set_current_key_id` | `duplex_server_creates_persistent_and_temp_key_retries_binds_and_delivers_rpc` |
+| `session_private.cpp:2487 SessionPrivate::applyAuthKey` | Принимает ключ либо запускает его создание | `SessionPrivate::apply_auth_key` | `duplex_server_creates_persistent_and_temp_key_retries_binds_and_delivers_rpc` |
+| `session_private.cpp:2545 SessionPrivate::noMediaKeyWithExistingRegularKey` | Проверяет возможность создания media ключа после regular | `SessionPrivate::no_media_key_with_existing_regular_key` | `key_creation_variants_cdn_and_data_owner_contract` |
+| `session_private.cpp:2551 SessionPrivate::destroyOldEnoughPersistentKey` | Отличает слишком молодой permanent key от действительно потерянного | `SessionPrivate::destroy_old_enough_persistent_key` | `binding_success_failure_persistent_age_and_key_destruction` |
+| `session_private.cpp:2570 SessionPrivate::tryAcquireKeyCreation` | Захватывает создание permanent/temp/CDN ключа и обрабатывает завершение | `SessionPrivate::try_acquire_key_creation` | `duplex_server_creates_persistent_and_temp_key_retries_binds_and_delivers_rpc` |
+| `session_private.cpp:2653 SessionPrivate::authKeyChecked` | Запускает сессию с проверенным ключом и запросом salt | `SessionPrivate::auth_key_checked` | `initial_salt_ping_sequence_and_rpc_delivery` |
+| `session_private.cpp:2666 SessionPrivate::onError` | Обрабатывает ошибки кандидатов, включая -429 и -444 | `SessionPrivate::on_error` | `binding_success_failure_persistent_age_and_key_destruction` |
+| `session_private.cpp:2686 SessionPrivate::handleError` | Различает потерю ключа -404 и обычный сетевой сбой | `SessionPrivate::handle_error` | `binding_success_failure_persistent_age_and_key_destruction` |
+| `session_private.cpp:2698 SessionPrivate::destroyTemporaryKey` | Удаляет временный ключ и уведомляет о смене | `SessionPrivate::destroy_temporary_key` | `binding_success_failure_persistent_age_and_key_destruction` |
+| `session_private.cpp:2713 SessionPrivate::sendSecureRequest` | Дополняет и шифрует сообщение MTProto 2.0 | `SessionPrivate::send_secure_request` | `initial_salt_ping_sequence_and_rpc_delivery; native `original_send_secure_request_with_fixed_entropy`` |
+| `session_private.cpp:2771 SessionPrivate::wasSent` | Ищет сообщение в отправленных, подтверждённых и специальных индексах | `SessionPrivate::was_sent` | `state_requests_reply_info_and_cancellation` |
+| `session_private.cpp:2798 SessionPrivate::clearUnboundKeyCreator` | Останавливает незавершённый DH, сохраняя binder | `SessionPrivate::clear_unbound_key_creator` | `binding_success_failure_persistent_age_and_key_destruction` |
+| `session_private.cpp:2804 SessionPrivate::releaseKeyCreationOnFail` | Освобождает владение созданием ключа | `SessionPrivate::release_key_creation_on_fail` | `binding_success_failure_persistent_age_and_key_destruction` |
+| `session.cpp:20 SessionOptions::SessionOptions` | Копирует язык, прокси и разрешённые варианты транспорта | `SessionData::refresh_options + SessionOptions` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:40 SessionData::withSession` | Ставит команду только для живого владельца | `SessionData::with_session` | `session_data_options_keys_and_notifications` |
+| `session.cpp:52 SessionData::notifyConnectionInited` | Помечает DC инициализированным с особенностью исходного сравнения опций | `SessionData::notify_connection_inited` | `session_data_options_keys_and_notifications` |
+| `session.cpp:66 SessionData::queueTryToReceive` | Планирует доставку полученных сообщений | `SessionData::queue_try_to_receive` | `session_data_options_keys_and_notifications` |
+| `session.cpp:72 SessionData::queueNeedToResumeAndSend` | Планирует продолжение работы и отправку | `SessionData::queue_need_to_resume_and_send` | `session_data_options_keys_and_notifications` |
+| `session.cpp:78 SessionData::queueConnectionStateChange` | Ставит уведомление о состоянии в очередь | `SessionData::queue_connection_state_change` | `session_data_options_keys_and_notifications` |
+| `session.cpp:84 SessionData::queueResetDone` | Ставит уведомление о сбросе сессии в очередь | `SessionData::queue_reset_done` | `session_data_options_keys_and_notifications` |
+| `session.cpp:90 SessionData::queueSendAnything` | Планирует отправку с допустимой задержкой | `SessionData::queue_send_anything` | `session_data_options_keys_and_notifications` |
+| `session.cpp:96 SessionData::connectionInited` | Читает состояние initConnection у живого владельца | `SessionData::connection_inited` | `session_data_options_keys_and_notifications` |
+| `session.cpp:101 SessionData::getTemporaryKey` | Получает временный ключ нужного вида | `SessionData::get_temporary_key` | `session_data_options_keys_and_notifications` |
+| `session.cpp:106 SessionData::getPersistentKey` | Получает постоянный ключ | `SessionData::get_persistent_key` | `session_data_options_keys_and_notifications` |
+| `session.cpp:111 SessionData::acquireKeyCreation` | Захватывает право создавать ключ DC | `SessionData::acquire_key_creation` | `session_data_options_keys_and_notifications` |
+| `session.cpp:116 SessionData::releaseKeyCreationOnDone` | Публикует привязанный временный и постоянный ключи | `SessionData::release_key_creation_on_done` | `session_data_options_keys_and_notifications` |
+| `session.cpp:127 SessionData::releaseCdnKeyCreationOnDone` | Публикует временный ключ CDN без привязки | `SessionData::release_cdn_key_creation_on_done` | `session_data_options_keys_and_notifications` |
+| `session.cpp:135 SessionData::releaseKeyCreationOnFail` | Освобождает владение созданием ключа | `SessionData::release_key_creation_on_fail` | `session_data_options_keys_and_notifications` |
+| `session.cpp:142 SessionData::destroyTemporaryKey` | Удаляет временный ключ и уведомляет о смене | `SessionData::destroy_temporary_key` | `session_data_options_keys_and_notifications` |
+| `session.cpp:149 SessionData::detach` | Запрещает команды и чтение ключей после удаления владельца | `SessionData::detach` | `session_data_options_keys_and_notifications` |
+| `session.cpp:154 Session::Session` | Создаёт данные, подписки, sender timer и автомат | `Session::new` | `session_data_options_keys_and_notifications` |
+| `session.cpp:171 Session::~Session` | Останавливает автомат и освобождает захваченное создание ключа | `Drop for Session` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:179 Session::watchDcKeyChanges` | Реагирует только на изменения ключей своего DC | `Session::watch_dc_key_changes` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:196 Session::watchDcOptionsChanges` | Реагирует на адреса своего DC и ключи CDN | `Session::watch_dc_options_changes` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:217 Session::start` | Заменяет остановленный автомат новым | `Session::start` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:226 Session::restart` | Закрывает соединение и ставит повтор с нужной задержкой | `Session::restart` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:239 Session::refreshOptions` | Снимает языковые и proxy настройки и выбирает транспорты | `Session::refresh_options` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:260 Session::reInitConnection` | Сбрасывает initConnection и перезапускается | `Session::re_init_connection` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:265 Session::setConnectionNotInited` | Помечает DC требующим initConnection | `Session::set_connection_not_inited` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:269 Session::stop` | Останавливает автомат, разрешая последующее возобновление | `Session::stop` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:278 Session::kill` | Окончательно останавливает сессию и отделяет данные от владельца | `Session::kill` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:285 Session::unpaused` | Возобновляет отложенную доставку ответов | `Session::unpaused` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:294 Session::sendAnything` | Объединяет запросы отправки по самому раннему сроку | `Session::send_anything` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:324 Session::needToResumeAndSend` | Возобновляет автомат и передаёт обычную отправку или ping | `Session::need_to_resume_and_send` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:344 Session::connectionStateChange` | Доставляет состояние в главный поток | `Session::connection_state_change` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:348 Session::resetDone` | Доставляет уведомление о смене session_id | `Session::reset_done` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:352 Session::cancel` | Убирает запрос из очередей toSend и haveSent | `Session::cancel` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:363 Session::ping` | Планирует принудительный ping | `Session::ping` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:368 Session::requestState` | Возвращает состояние конкретного запроса | `Session::request_state` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:398 Session::getState` | Возвращает состояние или оставшееся время повтора | `Session::get_state` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:419 Session::transport` | Возвращает название выбранного транспорта | `Session::transport` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:423 Session::sendPrepared` | Обнуляет wire header и ставит подготовленный запрос в очередь | `Session::send_prepared` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:443 Session::acquireKeyCreation` | Захватывает право создавать ключ DC | `Session::acquire_key_creation` | `session_data_options_keys_and_notifications` |
+| `session.cpp:450 Session::releaseKeyCreationOnDone` | Публикует привязанный временный и постоянный ключи | `Session::release_key_creation_on_done` | `session_data_options_keys_and_notifications` |
+| `session.cpp:461 Session::releaseCdnKeyCreationOnDone` | Публикует временный ключ CDN без привязки | `Session::release_cdn_key_creation_on_done` | `session_data_options_keys_and_notifications` |
+| `session.cpp:468 Session::releaseGenericKeyCreationOnDone` | Завершает захват DC и уведомляет о записи ключей | `SessionData::release_generic_key_creation_on_done` | `session_data_options_keys_and_notifications` |
+| `session.cpp:501 Session::releaseKeyCreationOnFail` | Освобождает владение созданием ключа | `Session::release_key_creation_on_fail` | `session_data_options_keys_and_notifications` |
+| `session.cpp:510 Session::notifyDcConnectionInited` | Помечает DC инициализированным | `Session::notify_dc_connection_inited` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:516 Session::destroyTemporaryKey` | Удаляет временный ключ и уведомляет о смене | `Session::destroy_temporary_key` | `session_data_options_keys_and_notifications` |
+| `session.cpp:527 Session::getDcWithShift` | Возвращает идентификатор сессии | `Session::get_dc_with_shift` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:531 Session::getTemporaryKey` | Получает временный ключ нужного вида | `Session::get_temporary_key` | `session_data_options_keys_and_notifications` |
+| `session.cpp:535 Session::getPersistentKey` | Получает постоянный ключ | `Session::get_persistent_key` | `session_data_options_keys_and_notifications` |
+| `session.cpp:539 Session::connectionInited` | Читает состояние initConnection у живого владельца | `Session::connection_inited` | `session_data_options_keys_and_notifications` |
+| `session.cpp:543 Session::tryToReceive` | Доставляет RPC и обновления в FIFO с учётом pause и основного DC | `Session::try_to_receive` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session.cpp:579 Session::killConnection` | Удаляет автомат и отменяет его транспорт | `Session::kill_connection` | `session_controller_main_queue_lifecycle_options_and_cancellation` |
+| `session_private.cpp LogIdsVector` | Форматирует диагностический список с сохранением повтора первого ID | `log_ids_vector` | `source_log_version_timezone_and_protocol_dc_rules` |
+| `session_private.cpp ComputeAppVersion` | Добавляет архитектуру и суффикс дистрибутива к версии | `compute_app_version` | `source_log_version_timezone_and_protocol_dc_rules` |
+| `session_private.cpp WrapInvokeAfter` | Добавляет зависимость только от ещё отправленного запроса | `SessionPrivate::wrap_invoke_after` | `container_limits_invoke_after_layer_and_sequence_wrap` |
+| `session_private.cpp ConstTimeIsDifferent` | Сравнивает байты msg_key без раннего выхода | `tg_base::openssl_help::const_time_equal` | `original_handle_received_envelope_checks; native `original_handle_received_envelope_checks` (конверт до dispatcher)` |
+| `session.h SessionData::SessionData` | Создаёт общие данные и связь с владельцем | `SessionData::new` | `session_data_options_keys_and_notifications` |
+| `session.h SessionData::setOptions` | Записывает снимок опций под блокировкой | `SessionData::set_options` | `session_data_options_keys_and_notifications` |
+| `session.h SessionData::options` | Читает снимок опций под блокировкой | `SessionData::options` | `session_data_options_keys_and_notifications` |
+| `session.h SessionData::toSendMutex` | Даёт блокировку очереди исходящих запросов | `SessionData::queues: Mutex<RequestQueues>` | `session_data_options_keys_and_notifications` |
+| `session.h SessionData::haveSentMutex` | Даёт блокировку карты отправленных запросов | `SessionData::queues: Mutex<RequestQueues>` | `session_data_options_keys_and_notifications` |
+| `session.h SessionData::haveReceivedMutex` | Даёт блокировку очереди ответов | `SessionData::queues: Mutex<RequestQueues>` | `session_data_options_keys_and_notifications` |
+| `session.h SessionData::toSendMap` | Даёт очередь подготовленных запросов | `SessionData::queues: Mutex<RequestQueues>` | `session_data_options_keys_and_notifications` |
+| `session.h SessionData::haveSentMap` | Даёт индекс отправленных сообщений | `SessionData::queues: Mutex<RequestQueues>` | `session_data_options_keys_and_notifications` |
+| `session.h SessionData::haveReceivedMessages` | Даёт очередь ответов главного потока | `SessionData::queues: Mutex<RequestQueues>` | `session_data_options_keys_and_notifications` |
+| `session.h SessionOptions::default` | Задаёт исходные значения SessionOptions | `SessionOptions::default` | `session_data_options_keys_and_notifications` |

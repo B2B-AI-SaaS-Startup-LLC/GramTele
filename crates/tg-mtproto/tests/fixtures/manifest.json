@@ -77,6 +77,7 @@
     "http-post.bin": "bd8bb640928599674e7df8b44a6349b6edc12ee478aa372791f1c5b0955e6ec1",
     "session-envelope.bin": "bec5931787c4233ce2698e3c133fbda7db219a4fd79f5cfaea1022cf3fdd2f0d",
     "original/SourceFiles/mtproto/session_private.cpp": "895cba17c3c40f01e14b9b831e33335ca748edbd868dfb4178dc38d6d981c2b8",
-    "session-receive.bin": "eb6c72a79ad7a6da30192cd5d78f49cc4f3ad57fd999f599bc1d4567b3cca246"
+    "session-receive.bin": "94be05a9a68a877a64167fbabf653f0704b92376806be2b0be830071f8af3626",
+    "test-server-rsa.pub": "7b3cc3d9dbc36ba3ed058ba7fdcad539d11032118bc2534c5edd8057f49404af"
   }
 }

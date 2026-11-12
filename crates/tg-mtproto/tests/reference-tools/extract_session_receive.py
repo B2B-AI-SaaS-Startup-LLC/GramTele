@@ -56,10 +56,11 @@ int main(int argc,char**argv){
   if(variant==1)packet[0]^=1;if(variant==2)packet[2]^=1;
   if(variant>=14&&variant<=16)for(int i=0;i<variant-13;++i)packet.push_back(0x1020304);
   if(variant==17)packet.resize(17);
+  if(variant==18)packet.resize((16*1024*1024)/4+1);
   return packet;
  };
- for(int variant=0;variant<18;++variant){auto packet=make(variant);MTP::details::Connection connection;connection.queue.push_back(packet);MTP::details::SessionPrivate instance;instance._connection=&connection;instance._encryptionKey=auth;instance._keyId=auth->keyId();instance.handleReceived();
-  uint32_t header[]={uint32_t(variant),uint32_t(packet.size()),uint32_t(instance.accepted),uint32_t(instance.bad_time),uint32_t(instance.output.size())};std::fwrite(header,4,5,f);std::fwrite(packet.data(),4,packet.size(),f);std::fwrite(instance.output.data(),4,instance.output.size(),f);
+ for(int variant=0;variant<19;++variant){auto packet=make(variant);MTP::details::Connection connection;connection.queue.push_back(packet);MTP::details::SessionPrivate instance;instance._connection=&connection;instance._encryptionKey=auth;instance._keyId=auth->keyId();instance.handleReceived();
+  uint32_t header[]={uint32_t(variant),uint32_t(variant==18?0:packet.size()),uint32_t(instance.accepted),uint32_t(instance.bad_time),uint32_t(instance.output.size())};std::fwrite(header,4,5,f);if(variant!=18)std::fwrite(packet.data(),4,packet.size(),f);std::fwrite(instance.output.data(),4,instance.output.size(),f);
  }
  std::fclose(f);
 }

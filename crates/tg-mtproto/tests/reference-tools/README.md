@@ -88,9 +88,11 @@ build, как для native_tls; сгенерированный OUTPUT.cpp по�
 handleReceived до `wasConnected`: original размер/auth_key_id, AES decrypt,
 ConstTimeIsDifferent/SHA256, msg_len/padding/session/msg_id и badTime.
 Network queue и restart заменены sink-обвязкой, DebugEnabled=false, unix=1700000000.
-Метод исполняется для 18 входов: valid, auth_key_id, msg_key, session, msg_id low
+Метод исполняется для 19 входов: valid, auth_key_id, msg_key, session, msg_id low
 0/2, невыравненная/длинная/переполненная длина, padding>1024, границы времени,
-0..3 transport-padding words и truncated packet. Диспетчер RPC, salt mutation,
+0..3 transport-padding words и truncated/oversized packet. Диспетчер RPC, salt mutation,
 окно дубликатов и callbacks не заменяются этими образцами: они проверяются отдельно.
 `native_session_receive OUTPUT.bin`: header[5] u32 LE = case, packet words,
 accepted, badTime, decrypted words; затем packet и decrypted header+body.
+
+Случай 18 хранит packet words=0 как компактное описание входа из 4 194 305 нулевых слов; C++ выполняет его целиком, Rust восстанавливает его перед проверкой. Это проверка верхней границы размера без 16 MiB нулей в fixture.
