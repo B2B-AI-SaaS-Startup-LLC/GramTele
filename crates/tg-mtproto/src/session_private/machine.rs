@@ -174,7 +174,6 @@ pub struct SessionPrivate<C: SessionClock, R: Random> {
     started_connecting_at: i64,
     candidates: BTreeMap<u64, Candidate>,
     connection: Option<Candidate>,
-    next_connection: u64,
     actions: VecDeque<TransportAction>,
     options: SessionOptions,
     real_dc_type: DcType,
@@ -211,6 +210,7 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         info: ClientInfo,
     ) -> Self {
         assert_ne!(data.shifted_dc_id, 0);
+        data.snapshot.lock().unwrap().private_alive = true;
         let real = data.environment.dc_options().dc_type(data.shifted_dc_id);
         let queue = Rc::new(RefCell::new(VecDeque::new()));
         let timers = Timers::new(&host, queue.clone());
@@ -233,7 +233,6 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
             started_connecting_at: 0,
             candidates: BTreeMap::new(),
             connection: None,
-            next_connection: 0,
             actions: VecDeque::new(),
             real_dc_type: real,
             current_dc_type: real,
@@ -283,6 +282,11 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
                 AlarmKind::ClearContainers => self.clear_old_containers(),
             }
         }
+        self.data.snapshot.lock().unwrap().retry_at = if self.timers.retry.is_active() {
+            Some(self.retry_finish)
+        } else {
+            None
+        };
     }
     pub fn next_deadline(&self) -> Option<i64> {
         self.host.next_deadline()
@@ -321,6 +325,15 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
             return false;
         }
         self.state = state;
+        {
+            let mut snapshot = self.data.snapshot.lock().unwrap();
+            snapshot.state = state;
+            snapshot.retry_at = if state < 0 {
+                Some(self.host.now() - (state as i64))
+            } else {
+                None
+            };
+        }
         if state < 0 {
             self.retry_timeout = -(state as i64);
             self.timers.retry.call_once(self.retry_timeout);
@@ -330,7 +343,7 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         true
     }
     fn append_test_connection(&mut self, http: bool, endpoint: Endpoint) {
-        self.next_connection += 1;
+        let connection_id = self.data.next_connection_id();
         let priority = if endpoint.ip.parse::<std::net::Ipv6Addr>().is_ok() {
             if self.info.prefer_ipv6 {
                 2
@@ -342,7 +355,7 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         } + i32::from(!http)
             + i32::from(!endpoint.secret.is_empty());
         let spec = ConnectionSpec {
-            id: self.next_connection,
+            id: connection_id,
             endpoint,
             http,
             priority,
@@ -507,7 +520,14 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
             candidate.full_timeout = timeout;
         }
     }
+    pub fn owns_connection(&self, id: u64) -> bool {
+        self.candidates.contains_key(&id)
+            || self.connection.as_ref().is_some_and(|c| c.spec.id == id)
+    }
     pub fn on_connected(&mut self, id: u64, is_connected: bool, tag: String, full_timeout: i64) {
+        if !self.candidates.contains_key(&id) {
+            return;
+        }
         if !is_connected {
             self.restart();
             return;
@@ -526,6 +546,8 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         } else {
             self.timers.better.cancel();
             self.connection = self.candidates.remove(&id);
+            self.data.snapshot.lock().unwrap().transport =
+                self.connection.as_ref().unwrap().tag.clone();
             self.close_candidates();
             self.check_auth_key();
         }
@@ -536,6 +558,9 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         }
     }
     pub fn on_disconnected(&mut self, id: u64) {
+        if !self.owns_connection(id) {
+            return;
+        }
         self.remove_test_connection(id);
         if self.candidates.is_empty() {
             self.destroy_all_connections();
@@ -566,12 +591,15 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
             .map(|(&id, _)| id);
         if let Some(id) = id {
             self.connection = self.candidates.remove(&id);
+            self.data.snapshot.lock().unwrap().transport =
+                self.connection.as_ref().unwrap().tag.clone();
             self.close_candidates();
             self.check_auth_key();
         }
     }
     fn destroy_all_connections(&mut self) {
         self.clear_unbound_key_creator();
+        self.data.snapshot.lock().unwrap().transport.clear();
         self.timers.better.cancel();
         self.timers.received.cancel();
         self.timers.connected.cancel();
@@ -905,6 +933,9 @@ impl<C: SessionClock, R: Random> SessionPrivate<C, R> {
         self.restart();
     }
     pub fn on_error(&mut self, id: u64, code: i32) {
+        if !self.owns_connection(id) {
+            return;
+        }
         if code == -444 {
             self.notify(InstanceEvent::BadConfigurationError);
         }
@@ -2152,6 +2183,7 @@ impl<C: SessionClock, R: Random> Drop for SessionPrivate<C, R> {
     fn drop(&mut self) {
         self.release_key_creation_on_fail();
         self.do_disconnect();
+        self.data.snapshot.lock().unwrap().private_alive = false;
         let mut store = self.data.store.lock().unwrap();
         for (_, handle) in std::mem::take(&mut self.state_requests) {
             store.remove(handle);

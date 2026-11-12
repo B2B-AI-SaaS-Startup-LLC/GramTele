@@ -873,7 +873,9 @@ fn binding_success_failure_persistent_age_and_key_destruction() {
         .get_temporary_key(TemporaryKeyType::Regular)
         .is_none());
     assert_ne!(h.p.key_id, old);
-    h.p.on_error(h.connection, -444);
+    h.p.connect_to_server(false);
+    let current = *h.p.candidates.keys().next().unwrap();
+    h.p.on_error(current, -444);
     h.drain();
     tg_runtime::process_main_queue();
     assert!(h
@@ -977,6 +979,12 @@ fn session_controller_main_queue_lifecycle_options_and_cancellation() {
     );
     assert_eq!(session.get_dc_with_shift(), 2);
     assert_eq!(session.request_state(0), 1);
+    assert_eq!(handle.request_state_at(0, clock.now().monotonic_ms), 1);
+    assert_eq!(
+        handle.get_state_at(clock.now().monotonic_ms),
+        session.get_state()
+    );
+    assert!(Arc::ptr_eq(handle.data(), &session.data));
     let actions = session.take_transport_actions();
     let connection = actions
         .into_iter()
@@ -1029,6 +1037,8 @@ fn session_controller_main_queue_lifecycle_options_and_cancellation() {
     session.process();
     assert_eq!(session.get_state(), CONNECTED);
     assert_eq!(session.transport(), "TCP");
+    assert_eq!(handle.transport(), "TCP");
+    assert_eq!(handle.get_state(), CONNECTED);
     assert!(env.events.lock().unwrap().is_empty());
     tg_runtime::process_main_queue();
     assert!(env
@@ -1042,6 +1052,7 @@ fn session_controller_main_queue_lifecycle_options_and_cancellation() {
     let req = session.data.register_request(request);
     session.send_prepared(req, -1);
     assert_eq!(session.request_state(5), 2);
+    assert_eq!(handle.request_state(5), 2);
     session.cancel(5, 0);
     assert_eq!(session.request_state(5), 0);
     session.send_prepared(req, 30);
@@ -1105,6 +1116,45 @@ fn session_controller_main_queue_lifecycle_options_and_cancellation() {
     env.changes.send(EnvironmentChange::DcOptions(2)).unwrap();
     session.process();
     session.stop();
+    assert_eq!(session.request_state(5), 0);
+    assert_eq!(handle.request_state(5), 0);
+    assert_eq!(handle.get_state(), DISCONNECTED);
+    assert!(handle.transport().is_empty());
+    session.start();
+    let fresh: Vec<_> = session
+        .take_transport_actions()
+        .into_iter()
+        .filter_map(|action| {
+            if let TransportAction::Connect(spec) = action {
+                Some(spec.id)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(!fresh.is_empty());
+    assert!(fresh.iter().all(|id| *id > connection));
+    let before = session.get_state();
+    env.events.lock().unwrap().clear();
+    session.on_transport_event(TransportEvent::Error(connection, -444));
+    session.on_transport_event(TransportEvent::Disconnected(connection));
+    session.on_transport_event(TransportEvent::Connected {
+        id: connection,
+        tag: "STALE".into(),
+        full_timeout: 1,
+    });
+    session.on_transport_event(TransportEvent::ReceivedSome(connection));
+    session.on_transport_event(TransportEvent::SyncTimeRequest(connection));
+    assert_eq!(session.get_state(), before);
+    assert!(handle.transport().is_empty());
+    session.process();
+    tg_runtime::process_main_queue();
+    assert!(!env.events.lock().unwrap().iter().any(|event| matches!(
+        event,
+        InstanceEvent::BadConfigurationError | InstanceEvent::SyncHttpUnixtime
+    )));
+
+    session.stop();
     assert_eq!(session.get_state(), DISCONNECTED);
     assert!(session
         .take_transport_actions()
@@ -1114,6 +1164,10 @@ fn session_controller_main_queue_lifecycle_options_and_cancellation() {
     assert_eq!(session.get_state(), CONNECTING);
     session.re_init_connection();
     session.process();
+    assert_eq!(
+        handle.get_state_at(clock.now().monotonic_ms),
+        session.get_state()
+    );
     session.ping();
     session.kill();
     session.restart();
