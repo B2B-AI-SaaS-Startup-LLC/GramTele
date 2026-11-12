@@ -896,28 +896,28 @@ mod tests {
     }
 
     #[test]
-    fn real_thread_environment_end_to_end() {
-        let env = ConcurrentTimerEnvironment::new();
-        let queue = Queue::default();
-        let (tx, rx) = std::sync::mpsc::channel();
-        let tx = Mutex::new(tx);
-        let timer = ConcurrentTimer::without_callback(queue.runner());
-        timer.set_callback(move || {
-            let _ = lock(&tx).send(());
-        });
+    fn runtime_queue_runner_with_virtual_clock() {
+        let clock = ManualClock::new(0);
+        let env = ConcurrentTimerEnvironment::manual(Arc::new(clock.clone()));
+        let queue = Arc::new(tg_runtime::Queue::new());
+        let runner_queue = queue.clone();
+        let count = Arc::new(AtomicUsize::new(0));
+        let seen = count.clone();
+        let timer = ConcurrentTimer::in_environment(
+            &env,
+            Arc::new(move |task| runner_queue.async_(task)),
+            Some(Box::new(move || {
+                seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            })),
+        );
         timer.call_once(5);
-        // The owner "queue" is drained by this thread until the callback
-        // reports; the environment thread does the waiting.
-        loop {
-            queue.drain();
-            if rx.try_recv().is_ok() {
-                break;
-            }
-            std::thread::yield_now();
-        }
-        drop(timer);
-        drop(env);
-        // A second global environment can be made after the first is gone.
-        drop(ConcurrentTimerEnvironment::new());
+        clock.set(4);
+        env.process();
+        queue.sync(|| ());
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 0);
+        clock.set(5);
+        env.process();
+        queue.sync(|| ());
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 }

@@ -3,15 +3,12 @@
 //! The holder is ported. The original takes the state from the platform
 //! helper (macOS, Windows) or from `QNetworkInformation`
 //! (Linux: NetworkManager / GLib network monitor over D-Bus). That second
-//! source is deferred: on Linux nothing reports changes, `available` stays
-//! `true` (the value the original starts with) until a source is plugged in
-//! with [`NetworkReachability::set_available`].
+//! source is deferred. The constructor requires an explicit producer instead
+//! of pretending to detect connectivity. The platform backend is deferred.
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 use tg_rpl::{Lifetime, Producer, Variable};
-
-use crate::platform::base_platform_network_reachability as platform;
 
 /// `base::NetworkReachability`.
 pub struct NetworkReachability {
@@ -24,25 +21,24 @@ thread_local! {
 }
 
 impl NetworkReachability {
-    pub fn new() -> Self {
+    /// Requires a real source: the missing Qt reachability backend is not
+    /// silently replaced by permanent "online" state.
+    pub fn new(source: Producer<bool>) -> Self {
         let result = Self {
             available: Variable::new(true),
             _lifetime: Lifetime::new(),
         };
-        if let Some(helper) = platform::create() {
-            // The helper's stream is copied into the variable.
-            result.available.set_producer(helper.available_value());
-        }
+        result.available.set_producer(source);
         result
     }
 
     /// `Instance()`: shared while somebody holds it.
-    pub fn instance() -> Rc<NetworkReachability> {
+    pub fn instance(source: Producer<bool>) -> Rc<NetworkReachability> {
         GLOBAL.with(|global| {
             if let Some(result) = global.borrow().upgrade() {
                 return result;
             }
-            let result = Rc::new(Self::new());
+            let result = Rc::new(Self::new(source));
             *global.borrow_mut() = Rc::downgrade(&result);
             result
         })
@@ -67,12 +63,6 @@ impl NetworkReachability {
     }
 }
 
-impl Default for NetworkReachability {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,12 +70,14 @@ mod tests {
 
     #[test]
     fn starts_available_and_reports_changes() {
-        let reach = NetworkReachability::new();
+        let reach = NetworkReachability::new(tg_rpl::single(true));
         assert!(reach.available());
         let changes = Rc::new(Cell::new(0));
         let lifetime = Lifetime::new();
         let c = changes.clone();
-        reach.available_changes().on_next(move |_| c.set(c.get() + 1), &lifetime);
+        reach
+            .available_changes()
+            .on_next(move |_| c.set(c.get() + 1), &lifetime);
         reach.set_available(true);
         assert_eq!(changes.get(), 0);
         reach.set_available(false);
@@ -95,11 +87,11 @@ mod tests {
 
     #[test]
     fn instance_is_shared_while_held() {
-        let a = NetworkReachability::instance();
-        let b = NetworkReachability::instance();
+        let a = NetworkReachability::instance(tg_rpl::single(true));
+        let b = NetworkReachability::instance(tg_rpl::single(true));
         assert!(Rc::ptr_eq(&a, &b));
         drop((a, b));
-        let c = NetworkReachability::instance();
+        let c = NetworkReachability::instance(tg_rpl::single(true));
         assert!(c.available());
     }
 }

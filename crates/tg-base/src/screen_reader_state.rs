@@ -71,7 +71,10 @@ mod tests {
         let seen = Rc::new(RefCell::new(Vec::new()));
         let lifetime = tg_rpl::Lifetime::new();
         let s = seen.clone();
-        instance().unwrap().active_value().on_next(move |v| s.borrow_mut().push(v), &lifetime);
+        instance()
+            .unwrap()
+            .active_value()
+            .on_next(move |v| s.borrow_mut().push(v), &lifetime);
         state.accessibility_active_changed(true);
         state.accessibility_active_changed(true);
         assert!(instance().unwrap().active());

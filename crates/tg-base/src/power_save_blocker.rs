@@ -46,9 +46,15 @@ fn registry_lock() -> std::sync::MutexGuard<'static, Registry> {
     registry().lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Installs the platform implementation (`None` makes blocking a no-op).
+/// Installs/removes the platform implementation when no blockers are alive.
+/// Creating a blocker without an implementation fails explicitly.
 pub fn set_backend(backend: Option<Arc<dyn PowerSaveBackend>>) {
-    registry_lock().backend = backend;
+    let mut registry = registry_lock();
+    assert!(
+        registry.info.is_empty(),
+        "cannot replace backend while blockers are alive"
+    );
+    registry.backend = backend;
 }
 
 /// `base::PowerSaveBlocker`: blocks while alive.
@@ -65,6 +71,10 @@ impl PowerSaveBlocker {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         let mut registry = registry_lock();
+        assert!(
+            registry.backend.is_some(),
+            "PowerSaveBlocker requires a platform backend; Linux portal is deferred"
+        );
         registry.info.insert(id, (description.to_owned(), window));
         let backend = registry.backend.clone();
         let set = registry.sets.entry(ty).or_default();
@@ -203,11 +213,29 @@ mod tests {
 
         // update_power_save_blocker.
         let mut slot = None;
-        update_power_save_blocker(&mut slot, true, PreventAppSuspension, || "x".into(), || None);
+        update_power_save_blocker(
+            &mut slot,
+            true,
+            PreventAppSuspension,
+            || "x".into(),
+            || None,
+        );
         assert!(slot.is_some());
-        update_power_save_blocker(&mut slot, true, PreventAppSuspension, || "y".into(), || None);
+        update_power_save_blocker(
+            &mut slot,
+            true,
+            PreventAppSuspension,
+            || "y".into(),
+            || None,
+        );
         assert_eq!(slot.as_ref().unwrap().description(), "x");
-        update_power_save_blocker(&mut slot, false, PreventAppSuspension, || "".into(), || None);
+        update_power_save_blocker(
+            &mut slot,
+            false,
+            PreventAppSuspension,
+            || "".into(),
+            || None,
+        );
         assert!(slot.is_none());
         take();
         set_backend(None);

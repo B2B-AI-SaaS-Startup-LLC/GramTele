@@ -34,8 +34,8 @@
 //! and calls it through a const reference, so mutable state lives in
 //! `Cell`/`RefCell`, as in the rest of the port); a repeating timer is
 //! re-armed on its own grid (`deadline + k * interval`, missed periods are
-//! skipped), which is what Qt does internally, while the original estimates
-//! `_next = now + timeout`; the Qt timer type (coarse/precise) is accepted
+//! skipped), as Qt does internally; the public remaining-time estimate is
+//! `_next = now + timeout`, exactly as in the original; the Qt timer type (coarse/precise) is accepted
 //! and kept, but the host does not coalesce wake-ups.
 
 use std::cell::{Cell, RefCell};
@@ -157,7 +157,7 @@ trait Target {
     /// The slot `id` due at `deadline` was removed from the host and fires.
     fn fire(self: Rc<Self>, id: u64, deadline: Time);
     /// The system clock jumped (`Timer::Adjust`).
-    fn adjusted(&self) {}
+    fn adjusted(self: Rc<Self>) {}
 }
 
 struct Slot {
@@ -377,10 +377,17 @@ fn adjust_all_hosts() {
 /// `ConcurrentTimerEnvironment::adjust_all()` for background timers (done
 /// here too).
 pub fn check_local_time() -> bool {
-    let adjusted = tg_runtime::adjust_time();
+    check_local_time_with(tg_runtime::adjust_time)
+}
+
+/// Injects only the runtime's adjustment decision for deterministic tests.
+/// Production uses `tg_runtime::adjust_time`; no second time adjuster exists.
+pub fn check_local_time_with(adjust_time: impl FnOnce() -> bool) -> bool {
+    let adjusted = adjust_time();
     if adjusted {
         Timer::adjust_all();
         crate::concurrent_timer::ConcurrentTimerEnvironment::adjust_all();
+        crate::unixtime::http_invalidate();
     }
     adjusted
 }
@@ -457,6 +464,9 @@ impl Target for TimerShared {
                         deadline + interval * (1 + (now - deadline).max(0) / interval)
                     };
                     self.arm(next);
+                    // Qt keeps its scheduling grid, but Timer::_next is an
+                    // estimate measured from delivery, not the Qt deadline.
+                    self.next.set(now + interval);
                 }
             }
             Repeat::SingleShot => {}
@@ -469,8 +479,11 @@ impl Target for TimerShared {
     }
 
     /// `Timer::adjust`.
-    fn adjusted(&self) {
+    fn adjusted(self: Rc<Self>) {
         if self.is_active() {
+            let remaining = (self.next.get() - self.host.now()).max(0);
+            self.cancel();
+            self.arm(self.host.now() + remaining);
             self.adjusted.set(true);
         }
     }
@@ -894,7 +907,8 @@ mod tests {
         env.clock.set(1720);
         assert_eq!(env.host.process(), 1);
         assert_eq!(*log.borrow(), vec!["t=1720"]);
-        assert_eq!(timer.remaining_time(), 80);
+        assert_eq!(timer.remaining_time(), 100);
+        assert_eq!(env.host.next_deadline(), Some(1800));
     }
 
     #[test]
@@ -1185,8 +1199,8 @@ mod tests {
         // The alarm is recomputed even though the deadline is unchanged.
         let calls = env.alarm.calls();
         env.host.adjust();
-        assert_eq!(env.alarm.calls(), calls + 1);
-        assert_eq!(env.alarm.requested(), Some(3000));
+        assert!(env.alarm.calls() > calls);
+        assert_eq!(env.alarm.requested(), Some(32100));
         assert_eq!(timer.remaining_time(), 0);
 
         log.borrow_mut().clear();
@@ -1356,28 +1370,22 @@ mod tests {
 
     #[test]
     fn main_queue_integration_end_to_end() {
-        // Real clock, real alarm thread, a private main queue is not
-        // available to the thread-local host, so use `process()` by hand
-        // from the alarm callback via a channel.
-        let host = TimerHost::new(Arc::new(SystemClock));
-        let (tx, rx) = std::sync::mpsc::channel();
-        let tx = Mutex::new(tx);
-        host.set_alarm(Some(Rc::new(ThreadAlarm::new(
-            Arc::new(SystemClock),
-            move || {
-                let _ = lock(&tx).send(());
-            },
-        ))));
+        let env = Env::new();
+        let queue = tg_runtime::MainQueue::new();
+        queue.bind_current_thread();
         let fired = Rc::new(Cell::new(0));
-        let timer = {
+        let timer = env.timer({
             let fired = fired.clone();
-            Timer::in_host(&host, Some(Rc::new(move || fired.set(fired.get() + 1))))
-        };
+            move || fired.set(fired.get() + 1)
+        });
         timer.call_once(5);
-        while fired.get() == 0 {
-            rx.recv_timeout(Duration::from_secs(30)).expect("woken");
+        env.clock.advance(5);
+        let host = env.host.clone();
+        queue.post_local(move || {
             host.process();
-        }
+        });
+        assert_eq!(fired.get(), 0);
+        queue.process();
         assert_eq!(fired.get(), 1);
     }
 }

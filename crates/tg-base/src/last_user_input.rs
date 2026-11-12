@@ -20,7 +20,8 @@ pub fn note_user_input() {
 
 /// `base::LastUserInputTime`.
 pub fn last_user_input_time() -> Time {
-    base_platform_last_input::last_user_input_time().unwrap_or_else(|| RESULT.load(Ordering::Relaxed))
+    base_platform_last_input::last_user_input_time()
+        .unwrap_or_else(|| RESULT.load(Ordering::Relaxed))
 }
 
 /// `base::SinceLastUserInput`.
@@ -41,7 +42,10 @@ mod tests {
         base_platform_last_input::set_provider(Some(Box::new(|| Some(42))));
         assert_eq!(last_user_input_time(), 42);
         assert!(base_platform_last_input::last_user_input_time_supported());
-        assert!(since_last_user_input() >= 0);
+        let before = tg_runtime::now();
+        let since = since_last_user_input();
+        let after = tg_runtime::now();
+        assert!((before - 42..=after - 42).contains(&since));
         base_platform_last_input::set_provider(Some(Box::new(|| None)));
         assert_eq!(last_user_input_time(), noted);
         base_platform_last_input::set_provider(None);

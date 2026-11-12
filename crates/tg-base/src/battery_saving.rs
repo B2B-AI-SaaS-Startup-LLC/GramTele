@@ -28,31 +28,39 @@ pub type HelperFactory = Box<dyn FnOnce(Box<dyn Fn()>) -> Rc<dyn AbstractBattery
 pub struct BatterySaving {
     helper: Rc<dyn AbstractBatterySaving>,
     value: Rc<Variable<Option<bool>>>,
+    _helper_slot: Rc<std::cell::RefCell<Option<Rc<dyn AbstractBatterySaving>>>>,
 }
 
-/// The default factory (no helper on the ported platforms yet).
-pub fn create_battery_saving() -> HelperFactory {
+/// Explicit unsupported helper. Linux GLib detection must be supplied by the
+/// future platform backend; this factory does not perform platform detection.
+pub fn unsupported_factory() -> HelperFactory {
     Box::new(|_| Rc::new(Unsupported))
 }
 
 impl BatterySaving {
     pub fn new(factory: HelperFactory) -> Self {
         let value = Rc::new(Variable::new(None));
-        let slot: Rc<std::cell::RefCell<Option<Rc<dyn AbstractBatterySaving>>>> =
-            Rc::default();
+        let slot: Rc<std::cell::RefCell<Option<Rc<dyn AbstractBatterySaving>>>> = Rc::default();
         let changed = {
             let value = Rc::downgrade(&value);
-            let slot = slot.clone();
+            let slot = Rc::downgrade(&slot);
             Box::new(move || {
-                if let (Some(value), Some(helper)) = (value.upgrade(), slot.borrow().clone()) {
-                    value.set(helper.enabled());
+                if let (Some(value), Some(slot)) = (value.upgrade(), slot.upgrade()) {
+                    let helper = slot.borrow().clone();
+                    if let Some(helper) = helper {
+                        value.set(helper.enabled());
+                    }
                 }
             })
         };
         let helper = factory(changed);
         *slot.borrow_mut() = Some(helper.clone());
         value.set(helper.enabled());
-        Self { helper, value }
+        Self {
+            helper,
+            value,
+            _helper_slot: slot,
+        }
     }
 
     pub fn supported(&self) -> bool {
@@ -88,20 +96,45 @@ mod tests {
 
     #[test]
     fn unsupported_is_false_and_unsupported() {
-        let saving = BatterySaving::new(create_battery_saving());
+        let saving = BatterySaving::new(unsupported_factory());
         assert!(!saving.supported());
         assert_eq!(saving.enabled(), None);
         let seen = Rc::new(RefCell::new(Vec::new()));
         let lifetime = tg_rpl::Lifetime::new();
         let s = seen.clone();
-        saving.value().on_next(move |v| s.borrow_mut().push(v), &lifetime);
+        saving
+            .value()
+            .on_next(move |v| s.borrow_mut().push(v), &lifetime);
         assert_eq!(*seen.borrow(), vec![false]);
+    }
+
+    #[test]
+    fn stored_change_callback_does_not_retain_the_helper() {
+        struct Helper {
+            _changed: Box<dyn Fn()>,
+        }
+        impl AbstractBatterySaving for Helper {
+            fn enabled(&self) -> Option<bool> {
+                Some(false)
+            }
+        }
+        let weak_slot = Rc::new(RefCell::new(None));
+        let output = weak_slot.clone();
+        let saving = BatterySaving::new(Box::new(move |changed| {
+            let helper = Rc::new(Helper { _changed: changed });
+            *output.borrow_mut() = Some(Rc::downgrade(&helper));
+            helper
+        }));
+        assert!(weak_slot.borrow().as_ref().unwrap().upgrade().is_some());
+        drop(saving);
+        assert!(weak_slot.borrow().as_ref().unwrap().upgrade().is_none());
     }
 
     #[test]
     fn follows_the_helper_on_change_callback() {
         let fake = Rc::new(Fake(Cell::new(Some(false))));
-        let notify: Rc<RefCell<Option<Box<dyn Fn()>>>> = Rc::default();
+        type Notify = Rc<RefCell<Option<Box<dyn Fn()>>>>;
+        let notify: Notify = Rc::default();
         let (f, n) = (fake.clone(), notify.clone());
         let saving = BatterySaving::new(Box::new(move |changed| {
             *n.borrow_mut() = Some(changed);
@@ -112,7 +145,9 @@ mod tests {
         let seen = Rc::new(RefCell::new(Vec::new()));
         let lifetime = tg_rpl::Lifetime::new();
         let s = seen.clone();
-        saving.value().on_next(move |v| s.borrow_mut().push(v), &lifetime);
+        saving
+            .value()
+            .on_next(move |v| s.borrow_mut().push(v), &lifetime);
         fake.0.set(Some(true));
         (notify.borrow().as_ref().unwrap())();
         fake.0.set(None);
