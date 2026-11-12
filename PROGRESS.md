@@ -77,3 +77,55 @@
   проходят. `cargo fmt --check` также проходит.
 - Финальный `cargo clippy --workspace --all-targets -- -D warnings` после
   исправления чтения буфера: exit 0. Все обязательные проверки пройдены.
+
+### tg-base: криптография, байты, ZIP, время и служебные функции
+
+Ветка `port/tg-base-crypto` синхронизирована с main (включая TL layer 229)
+и влита в main. Коммит реализации — `e9a2b74`.
+Работа велась только в `ayugram-rs-wt/base-crypto`; соседние worktree
+base-runtime/codegen не изменялись. Cargo.lock не добавлялся.
+
+- Перечитаны исходники и незавершённые заготовки bytes, crc32hash, file_lock,
+  base_file_utilities; остальные заготовки также проверены и доведены до тестов.
+- Добавлены openssl_help, zlib_help, random, unixtime, parse_helper,
+  qthelp_url, qthelp_regex. Подключены отдельными модулями, в алфавитном порядке
+  вместе с модулями main; в tg-base стоит forbid(unsafe_code).
+- Единственный bigint — crypto-bigint 0.7.11 (RustCrypto). Montgomery pow
+  для нечётных модулей и fixed-precision + CtSelect для чётных не ветвятся
+  по битам показателя. Это проверка реализации чтением, не timing-аудит.
+  BigNum очищается при Drop. SHA/HMAC/PBKDF2 — RustCrypto; flate2 использует
+  только rust_backend/miniz_oxide, без native zlib.
+- Исправлены пропущенный memmove, округление отрицательных дат Qt (усечение
+  к нулю вместо floor), уведомления unixtime через очередь главного потока,
+  обработка ZIP64 при чтении. Windows filename helpers реализованы, Windows
+  lock/Restart Manager — через safe обёртки file-guard/restart-manager.
+- Исправлены тестовые гонки глобального времени и зависание теста FileLock
+  на zombie-процессе: ребёнок reap-ится параллельно. Алгоритм оригинального
+  KillProcess сохранён, включая SIGTERM/SIGKILL и ожидание ESRCH. Сохранён
+  исходный отказ для POSIX descriptor 0.
+- Эталоны: SHA-1/256/512 FIPS, HMAC RFC 2202/4231, PBKDF2 RFC 6070,
+  Wycheproof SHA512 (65 байт), AES FIPS 197/SP 800-38A, OpenSSL IGE vector 1,
+  CRC32, signed/modular BigNum, малый raw RSA. ZIP/zlib-образцы созданы
+  reference zlib/minizip 1.3.2 и CPython, хранятся в tests/fixtures.
+  Stored ZIP writer побайтно совпал с minizip; для deflate этого не обещаем.
+- В реестре обновлены 20 своих файлов: 13 done и 7 partial.
+  Partial: zlib_help (ZIP64 writer/сжатые байты и text heuristic), random
+  (.h/.cpp: RAND_seed отсутствует у OS RNG, вход явно отбрасывается),
+  qthelp_regex (не весь PCRE, offsets UTF-8, поведение $), base_file_utilities
+  (.h/.cpp: Qt RegisterBundledResources отложен), file_lock_win
+  (реализован под cfg, но не собран и не запущен на Windows).
+- Три обязательные команды через Nix после интеграции main: fmt --check —
+  exit 0; clippy --workspace --all-targets -- -D warnings — exit 0;
+  test --workspace — exit 0, всего 349 тестов, 0 ошибок.
+- Сверены места вызова в mtproto/storage/core/passport/calls и lib_storage:
+  BE большие числа, левое дополнение до 256 байт для DH/SRP/RSA,
+  256-байтовые local PBKDF2 keys, AES IGE/CTR/CBC, HTTP Date.
+  Это проверено чтением, не запуском клиента или открытием tdata.
+  Реальные tdata и аккаунты пользователя не использовались.
+- Этап 2 не начинался. В SourceFiles/mtproto остаются AES/RSA-обёртки,
+  DH/SRP проверки, PEM/OAEP, X25519, fake TLS, derivation/framing и HTTP Date;
+  в storage/passport/core — прикладные derivation/шифрование/подписи.
+
+Полный отчёт по файлам, таблица C++ → Rust с примерами клиента, версии
+крейтов, эталоны, вывод команд и отличия:
+`crates/tg-base/docs/crypto-bytes-time.md`.
