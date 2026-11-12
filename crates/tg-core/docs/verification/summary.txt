@@ -1,0 +1,8 @@
+2026-11-13, Rust 1.95.0 pinned
+cargo fmt --check: exit 0
+cargo clippy --workspace --all-targets -- -D warnings: exit 0
+cargo test --workspace: exit 0; 595 passed, 0 failed, 3 ignored
+New ordinary tests: 12 (11 tg-core, 1 tg-mtproto). Extra ignored synthetic exporter was run explicitly with output environment variable; two old ignored tests are live DH.
+Map: 133 rows; 125 with tests, 8 Windows-only reading/replaced; 31 native overlaps.
+Native create/read and native read Rust: exit 0, all four cases.
+Live: sendCode length 5; signIn 22222 -> PHONE_CODE_INVALID. No further attempts. QR and live new-process tdata restore not reached.

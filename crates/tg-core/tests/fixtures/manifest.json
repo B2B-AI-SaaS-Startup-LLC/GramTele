@@ -1,0 +1,38 @@
+{
+  "original_commit": "0f2a31bb420de98f331990432265b131b8d836b5",
+  "app_version": 7002009,
+  "qt": "6.11.2",
+  "openssl": "3.6.5",
+  "entropy": "RAND_bytes counter 0..255 reset for each directory; fixed local key bytes 0..255",
+  "passcode": "test-passcode or empty",
+  "accounts": [
+    1,
+    3
+  ],
+  "keys": "per account DC2/DC4 current and DC1 destroy; independent fixed byte pattern",
+  "native_boundaries": "original file utilities including writeNow safe QSaveFile path; no original async scheduler or OS fallback; original auth serialization and Domain key/info parser/writer; Main owner and map empty payload sequence are harness, not Qt/Cache models",
+  "sha256": {
+    "qt-pbkdf.bin": "395b6cb3cf15ae65fa0957829830fa1d465010c74aca856dc741f5c9f5114ba6",
+    "tdata/nopass-1/D877F783D5D3EF8C/maps": "071b397da1b5e8729cf5eb2e1c578f25552fc0d8988de1c3eace44f4c78ab844",
+    "tdata/nopass-1/D877F783D5D3EF8Cs": "f6b4c28c7cb120975f7ce60126dea03191263f3f4513fc625204c62fa177b4c1",
+    "tdata/nopass-1/key_datas": "230599af916853bec34800a41626026f39df6876458f7df7adc6acb922b33f7e",
+    "tdata/nopass-3/A7FDF864FBC10B77/maps": "ae6c992145054213ca89e72f9c25850fb47a6bc0b250dddaef57c58e458dd3da",
+    "tdata/nopass-3/A7FDF864FBC10B77s": "821c3d95a644be8e8db15c31eb5aff8360fdc62ce96cdf85fa5daaf71053a069",
+    "tdata/nopass-3/D877F783D5D3EF8C/maps": "071b397da1b5e8729cf5eb2e1c578f25552fc0d8988de1c3eace44f4c78ab844",
+    "tdata/nopass-3/D877F783D5D3EF8Cs": "f6b4c28c7cb120975f7ce60126dea03191263f3f4513fc625204c62fa177b4c1",
+    "tdata/nopass-3/F8806DD0C461824F/maps": "89fd7800f4e17f3657524aed2cf2d445c6e43f733e5581555c226f78d954c368",
+    "tdata/nopass-3/F8806DD0C461824Fs": "32a4dd6dee06d53e656eaec84ce9edc9ceb1212f587c3006000bc92e1091ff00",
+    "tdata/nopass-3/key_datas": "9b5572a1bd39995d872b4f12c38f9fd3c42c971d12201bd9172501d406b579e7",
+    "tdata/pass-1/D877F783D5D3EF8C/maps": "071b397da1b5e8729cf5eb2e1c578f25552fc0d8988de1c3eace44f4c78ab844",
+    "tdata/pass-1/D877F783D5D3EF8Cs": "f6b4c28c7cb120975f7ce60126dea03191263f3f4513fc625204c62fa177b4c1",
+    "tdata/pass-1/key_datas": "604ce8f7d47d56e4c78d87a43567c7d35ea6c1bddfcedf40d816f26e828880c2",
+    "tdata/pass-3/A7FDF864FBC10B77/maps": "ae6c992145054213ca89e72f9c25850fb47a6bc0b250dddaef57c58e458dd3da",
+    "tdata/pass-3/A7FDF864FBC10B77s": "821c3d95a644be8e8db15c31eb5aff8360fdc62ce96cdf85fa5daaf71053a069",
+    "tdata/pass-3/D877F783D5D3EF8C/maps": "071b397da1b5e8729cf5eb2e1c578f25552fc0d8988de1c3eace44f4c78ab844",
+    "tdata/pass-3/D877F783D5D3EF8Cs": "f6b4c28c7cb120975f7ce60126dea03191263f3f4513fc625204c62fa177b4c1",
+    "tdata/pass-3/F8806DD0C461824F/maps": "89fd7800f4e17f3657524aed2cf2d445c6e43f733e5581555c226f78d954c368",
+    "tdata/pass-3/F8806DD0C461824Fs": "32a4dd6dee06d53e656eaec84ce9edc9ceb1212f587c3006000bc92e1091ff00",
+    "tdata/pass-3/key_datas": "70fc64520bacad83a4fccee5099a06c3c2390be89d9fedcff697ef929d6a873d"
+  },
+  "extra_samples": "Qt null/empty/raw UTF16/color; legacy/modern 256-byte PBKDF outputs; original narrow authorization -> wide reserialization"
+}

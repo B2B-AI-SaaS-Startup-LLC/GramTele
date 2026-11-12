@@ -1,0 +1,7 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/tdata' is dirty
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-mtproto)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.28s
+     Running `/home/yarik/Projects/ayugram-rs/target/debug/examples/test_dc_login`
+test phone: 9996620387; initial DC=2
+auth.sendCode: length=5; main DC=2
+test login stopped: Error { code: 400, kind: "PHONE_CODE_INVALID", description: "" }

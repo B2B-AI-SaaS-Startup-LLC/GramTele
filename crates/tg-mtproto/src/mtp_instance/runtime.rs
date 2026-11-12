@@ -25,6 +25,8 @@ pub struct RuntimeInstance {
     expiry_due: Rc<Cell<bool>>,
     delayed: super::InstanceTimers,
     loader: Option<ConfigLoader>,
+    automatic_config: bool,
+    config_pending: bool,
     dns: tg_base::timer::Timer,
     dns_client: reqwest::Client,
     dns_tx: mpsc::UnboundedSender<(crate::details::mtproto_domain_resolver::Request, Vec<u8>)>,
@@ -68,6 +70,8 @@ impl RuntimeInstance {
             expiry_due: due,
             delayed,
             loader: None,
+            automatic_config: true,
+            config_pending: false,
             dns,
             dns_tx,
             dns_rx,
@@ -101,6 +105,46 @@ impl RuntimeInstance {
     pub fn instance(&self) -> &Instance {
         &self.instance
     }
+    /// Disable before the first process() for tightly scoped test-only API examples.
+    /// Normal application behavior remains enabled by default.
+    pub fn set_automatic_config(&mut self, enabled: bool) {
+        self.automatic_config = enabled;
+        if !enabled {
+            self.config_pending |= self.loader.is_some();
+            self.loader = None;
+            self.special = None;
+            self.expiry.cancel();
+            self.expiry_due.set(false);
+        } else if std::mem::take(&mut self.config_pending) {
+            self.load_config();
+        }
+    }
+    fn load_config(&mut self) {
+        let mut loader = ConfigLoader::new(
+            self.instance.clone(),
+            self.instance.user_phone(),
+            self.instance.proxy_settings().enabled,
+            &self.host,
+        );
+        loader.load();
+        self.loader = Some(loader);
+    }
+    fn process_service_requests(&mut self) {
+        for notice in self.instance.take_service_requests() {
+            match notice {
+                Notice::ConfigNeeded if !self.automatic_config => {
+                    self.config_pending = true;
+                }
+                Notice::ConfigNeeded if self.loader.is_none() => {
+                    self.load_config();
+                }
+                Notice::HttpTimeNeeded if self.time.is_none() => {
+                    self.time = Some(self.new_special(true));
+                }
+                _ => {}
+            }
+        }
+    }
     pub fn process(&mut self) {
         self.host.process();
         self.instance.process(tg_runtime::now());
@@ -110,24 +154,7 @@ impl RuntimeInstance {
                 self.expiry.call_once(wait);
             }
         }
-        for notice in self.instance.take_service_requests() {
-            match notice {
-                Notice::ConfigNeeded if self.loader.is_none() => {
-                    let mut loader = ConfigLoader::new(
-                        self.instance.clone(),
-                        self.instance.user_phone(),
-                        self.instance.proxy_settings().enabled,
-                        &self.host,
-                    );
-                    loader.load();
-                    self.loader = Some(loader);
-                }
-                Notice::HttpTimeNeeded if self.time.is_none() => {
-                    self.time = Some(self.new_special(true));
-                }
-                _ => {}
-            }
-        }
+        self.process_service_requests();
         if let Some(loader) = &mut self.loader {
             loader.set_phone(self.instance.user_phone());
             loader.set_proxy_enabled(self.instance.proxy_settings().enabled);
@@ -253,5 +280,27 @@ impl Drop for RuntimeInstance {
         for task in self.tasks.drain(..) {
             task.abort();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn explicit_test_policy_suppresses_automatic_config_before_any_io() {
+        let mut runtime = RuntimeInstance::new(
+            Mode::Normal,
+            Fields::new(crate::mtproto_dc_options::Environment::Test),
+            ClientInfo::default(),
+            TransportPolicy::TcpOnly,
+        );
+        runtime.set_automatic_config(false);
+        runtime.process_service_requests();
+        assert!(runtime.loader.is_none());
+        assert!(runtime.config_pending);
+        assert!(runtime.instance.state.lock().unwrap().requests.is_empty());
+        runtime.set_automatic_config(true);
+        assert!(runtime.loader.is_some());
+        assert!(!runtime.config_pending);
     }
 }

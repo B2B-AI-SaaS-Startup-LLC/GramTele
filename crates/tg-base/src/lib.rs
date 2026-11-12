@@ -33,6 +33,7 @@ pub mod options;
 pub mod parse_helper;
 pub mod platform;
 pub mod power_save_blocker;
+pub mod qt_stream;
 pub mod qthelp_regex;
 pub mod qthelp_url;
 pub mod random;

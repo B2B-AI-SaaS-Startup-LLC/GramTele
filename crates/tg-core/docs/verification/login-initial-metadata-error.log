@@ -1,0 +1,15 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/tdata' is dirty
+    Updating crates.io index
+     Locking 1 package to latest compatible version
+      Adding md-5 v0.11.0
+   Compiling tg-tl-gen v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-tl-gen)
+   Compiling tg-runtime v0.1.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-runtime)
+   Compiling tg-rpl v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-rpl)
+   Compiling tg-tl v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-tl)
+   Compiling tg-scheme v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-scheme)
+   Compiling tg-base v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-base)
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/tdata/crates/tg-mtproto)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 02s
+     Running `/home/yarik/Projects/ayugram-rs/target/debug/examples/test_dc_login`
+test phone: 9996625336; initial DC=2
+test login stopped: Error { code: 400, kind: "CONNECTION_DEVICE_MODEL_EMPTY", description: "" }

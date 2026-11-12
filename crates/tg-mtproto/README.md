@@ -543,3 +543,31 @@ SHA256 скачанного файла проверяется стендом: в
 Автоматические Qt retry/compression ветви HTTP и прочий старый partial перечислены
 выше. С разрешения пользователя reqwest обслуживает также резервные HTTPS-конфиги;
 новых зависимостей в этой задаче нет.
+
+## Тестовый вход по коду и QR
+
+`cargo run -p tg-mtproto --example test_dc_login` следует intro_phone/code/qr/signup:
+только Environment::Test, api_id 17349/test hash, генерируемый 999662YYYY,
+код 2 по длине sendCode, при необходимости SignUp Port Test. QR: второй Instance
+exportLoginToken, первый accept, второй ждёт updateLoginToken, повторяет export
+и обрабатывает migrate через setMainDcId/import. После успеха — inputUserSelf
+через users.getUsers и logout обоих. FLOOD_WAIT передаётся вызывающему коду.
+Общий driver examples/support/test_login.rs также используется tg-core example
+нового процесса с временной tdata. В этих примерах set_automatic_config(false)
+отключает фоновые help.getConfig; обычное приложение сохраняет default=true.
+Тест explicit_test_policy_suppresses_automatic_config_before_any_io подтверждает
+подавление и повторное включение загрузчика без сети и ожидания таймеров.
+
+Фактический запуск 2026-11-12: после исправления отсутствующего device_model
+(пример задаёт Desktop/Linux) sendCode для 9996620387 вернул length=5, но signIn
+с 22222 — PHONE_CODE_INVALID. После отказа не подбирались другие коды/номера;
+QR/успешные self/logout и живое восстановление tdata не подтверждены. В первых
+двух запусках automatic config ещё не был отключён, поэтому help.getConfig мог
+выполняться автоматически — это лишний запрос относительно текущего задания.
+Дальнейших живых запусков после PHONE_CODE_INVALID не было. Сессия и Instance
+не менялись по предположению о причине отказа. Логи и границы проверки:
+[README tg-core](../tg-core/README.md), docs/verification/login-test-dc.log там.
+
+QDataStream теперь реализован один раз в tg_base::qt_stream; прежний путь
+mtproto::details::qt_stream переэкспортирует его. nullable_bytes/nullable_utf16
+дают raw null/empty/UTF16 для слоя хранения; старые convenience методы сохранены.
