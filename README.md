@@ -5,6 +5,7 @@
 - [PLAN.md](PLAN.md) — объём, этапы, технические замены.
 - [PORTING.md](PORTING.md) — правила порта и проверки.
 - [ledger/files.csv](ledger/files.csv) — реестр: по строке на каждый файл оригинала (крейт, этап, статус).
+- [secret-o3-api.jpg](secret-o3-api.jpg) — фото Сэма Альтмана.
 
 ## Окружение
 
