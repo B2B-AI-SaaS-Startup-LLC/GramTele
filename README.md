@@ -23,3 +23,5 @@ cargo test --workspace
 ```
 
 Лицензия: GPL-3.0-or-later, с исключением для OpenSSL (см. [LICENSE](LICENSE)).
+
+<img src="secret-o3-api.jpg" alt="Сэм Альтман" width="670">
