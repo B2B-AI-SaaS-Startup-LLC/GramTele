@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::weak_ptr::Alive;
+use tg_runtime::AsGuard;
 
 #[derive(Debug, Default)]
 pub struct BinaryGuard {
@@ -54,6 +55,32 @@ impl Drop for BinaryGuard {
 impl Alive for BinaryGuard {
     fn alive(&self) -> bool {
         BinaryGuard::alive(self)
+    }
+}
+
+/// Token of a [`BinaryGuard`] for `tg_runtime` guards: alive while both
+/// sides of the pair exist (`guard_traits<base::binary_guard>::check`).
+/// Unlike the original, which moves the guard into the closure, the token
+/// shares the pair flag, so the owner keeps the guard itself.
+#[derive(Clone, Debug, Default)]
+pub struct BinaryGuardToken {
+    both_alive: Option<Arc<AtomicBool>>,
+}
+
+impl Alive for BinaryGuardToken {
+    fn alive(&self) -> bool {
+        self.both_alive
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::SeqCst))
+    }
+}
+
+impl AsGuard for BinaryGuard {
+    type Token = BinaryGuardToken;
+    fn as_guard(&self) -> BinaryGuardToken {
+        BinaryGuardToken {
+            both_alive: self.both_alive.clone(),
+        }
     }
 }
 

@@ -11,7 +11,6 @@
 //! [`set_integration`].
 
 use std::sync::{Arc, OnceLock, RwLock};
-use std::time::Instant;
 
 /// The logging part of `base::Integration`.
 pub trait Integration: Send + Sync {
@@ -61,16 +60,9 @@ pub fn log_write_debug(message: &str, file: &str, _line: u32) {
     }
 }
 
-/// Microseconds since the first call (`crl::profile()` stand-in; the real
-/// clock belongs to `tg-runtime`).
-fn profile_micros() -> i64 {
-    static START: OnceLock<Instant> = OnceLock::new();
-    START.get_or_init(Instant::now).elapsed().as_micros() as i64
-}
-
 /// `base::LogProfilePrefix`: `"[12.345] "` (milliseconds).
 pub fn log_profile_prefix() -> String {
-    format!("[{:.3}] ", profile_micros() as f64 / 1000.)
+    format!("[{:.3}] ", tg_runtime::profile() as f64 / 1000.)
 }
 
 /// `LOG((...))`.

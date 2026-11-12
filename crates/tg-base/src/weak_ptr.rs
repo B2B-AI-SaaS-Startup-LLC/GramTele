@@ -7,9 +7,9 @@
 //! the client actually needs from `weak_ptr` is *liveness*: "was the object
 //! destroyed or invalidated?". That is what this module provides:
 //!
-//! - [`Alive`]: the interface `tg-runtime`'s `crl::guard` can rely on
-//!   (`fn alive(&self) -> bool`); implemented for [`WeakPtr`], `rc::Weak`,
-//!   `sync::Weak` and `BinaryGuard`.
+//! - [`Alive`]: an alias of `tg_runtime::GuardToken` (`fn alive(&self) -> bool`),
+//!   implemented for [`WeakPtr`], `rc::Weak`, `sync::Weak` and `BinaryGuard`;
+//!   [`WeakPtr`], [`HasWeakPtr`] and `BinaryGuard` are also `tg_runtime::AsGuard`.
 //! - [`HasWeakPtr`]: an embeddable field that owns the liveness flag. When
 //!   the owner is dropped (or `invalidate_weak_ptrs` is called) every
 //!   [`WeakPtr`] made from it turns dead. Cloning gives a fresh, unrelated
@@ -34,22 +34,16 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use tg_runtime::AsGuard;
 /// "Is the thing this handle refers to still alive?".
-pub trait Alive {
-    fn alive(&self) -> bool;
-}
-
-impl<T: ?Sized> Alive for std::rc::Weak<T> {
-    fn alive(&self) -> bool {
-        self.strong_count() > 0
-    }
-}
-
-impl<T: ?Sized> Alive for std::sync::Weak<T> {
-    fn alive(&self) -> bool {
-        self.strong_count() > 0
-    }
-}
+///
+/// This is `tg_runtime::GuardToken` itself (one concept, not two): the
+/// `crl::guard` family checks the token right before the call. `rc::Weak`
+/// and `sync::Weak` implement it in `tg-runtime`; [`WeakPtr`] and
+/// `BinaryGuard` implement it here, and both also implement
+/// `tg_runtime::AsGuard`, so they can be passed to `crl::guard_fn`,
+/// `crl::on_main_guarded`, `base::call_delayed` and friends directly.
+pub use tg_runtime::GuardToken as Alive;
 
 #[derive(Debug)]
 struct Tracker {
@@ -184,6 +178,24 @@ impl<T: ?Sized> Alive for WeakPtr<T> {
         self.tracker
             .as_ref()
             .is_some_and(|tracker| tracker.alive.load(Ordering::SeqCst))
+    }
+}
+
+/// `crl::guard_traits<base::weak_ptr<T>>`: the token is the pointer itself.
+impl<T: ?Sized> AsGuard for WeakPtr<T> {
+    type Token = WeakPtr<T>;
+    fn as_guard(&self) -> Self::Token {
+        self.clone()
+    }
+}
+
+/// `crl::guard_traits<T*>` for `has_weak_ptr` descendants: guard the object
+/// by passing its embedded field (`crl::guard_fn(&self.weak, ...)`). Dies
+/// with the owner or on `invalidate_weak_ptrs`.
+impl AsGuard for HasWeakPtr {
+    type Token = WeakPtr<HasWeakPtr>;
+    fn as_guard(&self) -> Self::Token {
+        make_weak(self)
     }
 }
 
