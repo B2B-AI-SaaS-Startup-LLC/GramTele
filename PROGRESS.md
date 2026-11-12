@@ -203,3 +203,276 @@ base-runtime/codegen не изменялись. Cargo.lock не добавлял
   компиляции): debug **82.927 с**, release **194.744 с**, обе exit 0.
   Команды и CPU times записаны в README. MTProto dispatcher остаётся этапом 2.
 - Cargo.lock не добавлен, push не выполнялся. Этап 2 не начат.
+
+### Закрепление toolchain и tg-codegen (2026-11-12)
+
+- Отдельный коммит main **15fdf80**, `build: pin Rust toolchain`: Rust **1.95.0**,
+  nixpkgs **c56a87d8e41ce69bd2af57eb35dcc117a9dfca33**, narHash в flake.lock.
+  shell.nix читает этот же lock, а не канал; CI использует dtolnay/rust-toolchain@1.95.0.
+  Проверены nix-shell и nix develop: rustc 1.95.0 (59807616e), cargo 1.95.0.
+  В PORTING.md записана одна команда всех трёх проверок. Замечания clippy 1.99.1
+  не подавлялись: выбран проверенный 1.95.0.
+- Worktree codegen сначала fast-forward с 58c9118 до main после pin. Работа —
+  **6b3fd8f** (`port: style, lang and emoji resource generators`), bytes policy
+  fixtures — **8d419e7**; обе влиты в main (**53e8a67**, **add44da**).
+  [README](crates/tg-codegen/README.md) содержит решение по каждому из **51 файла**:
+  **39 done, 4 replaced, 6 partial, 2 todo**. Все partial/todo — графические
+  части до этапа 5; ниже они также включены в общий пофайловый список.
+- Библиотека input → Rust text + три тонких CLI, параметры оригинала. Порядок
+  includes/structs/fields/variables, inheritance status, вычисления, ключи,
+  теги, plural slots, packed UTF-16, исторические aliases и CRC сохранены.
+  Состояние lang .tags/.indices — явный input/output, удалённые slots не теряются.
+  --subsets-only заменён отсутствием C++ scan/headers с пояснением; Rust Phrase
+  не требует C++ subset specialization cache.
+- Настоящие входы: все 76 .style + colors.palette, 9193 строки lang.strings,
+  lib_ui/emoji.txt и lib_ui/emoji_suggestions/emoji_autocomplete.json. Включены
+  три Ayu style files из cmake/td_ui.cmake и AyuGram language block. Сохранён
+  getWideMultiplied (factor 1.0/0.6/0.75), ConvertScale и contrast pairs.
+  Неподвижные тестовые снимки ресурсов с SHA256 и scale variants хранятся в
+  tests/fixtures/Telegram; .gitattributes запрещает их newline conversion.
+- Новая direct dependency: tg-base=0.0.0 (готовый CRC32); dev dependency:
+  serde_json="1" (при проверке 1.0.154, эталоны). Qt-compatible JSON reader
+  сохраняет UTF-16, lone surrogates, порядок QString, unknown escapes и глубину
+  1024; безопасная рекурсия работает в parser thread со stack 16 МиБ.
+  Новые SVG/PNG/WebP крейты не выбирались. tg-ui/tg-core/tg-runtime/tg-rpl не менялись;
+  compile contracts находятся только в тестах tg-codegen.
+- **Оригинал собран и запущен**. Корневой CMake не нашёл cmake/version.cmake и
+  validate_special_target.cmake. Standalone CMake вне клона затем собрал именно
+  codegen_style, codegen_lang и codegen_emoji из неизменённых .cpp/.h (Nix,
+  GCC 15.3.0, C++23, Qt 6.11.2). Prefix header — только includes/typedefs,
+  не замены алгоритмов. Запущены palette, lang, emoji и все 76 style inputs.
+  Полная сборка Telegram не запускалась. Клон остался чистым.
+- **Проверено эталоном оригинала**: все 588 palette colors/names/indices/fallback,
+  checksum **-1755758547** и точная CRC input string; все 10997 lang slots,
+  175 tags, state files, **249625 UTF-16 units / 10998 offsets**; структуры,
+  поля, значения, copies/inheritance каждого из 76 стилей; **3736 emoji**, flags,
+  variation parents, sections, **3767 map entries** с old aliases, postfixRequired
+  и emoticons; **2018 suggestions**, UTF-16 payload/lengths/init/char indices/CRC.
+  Отдельно сверены выбранные JSON diagnostics, unknown escapes, lone-surrogate
+  преобразование и native предел вложенности 1024/1025. Данные native запусков
+  и SHA256 C++ outputs сохранены в fixtures/reference, capture tools — в тестах.
+- **Своими тестами**: малые валидные/ошибочные образцы, filename/line/code/messages,
+  UTF-16, exact checksum string, slots/holes, исходный strict plural-at-EOF дефект,
+  CLI errors и два независимых запуска CLI с побайтовым сравнением, Ayu hooks;
+  вся Rust-выдача настоящих входов компилируется с test-only contracts.
+- **Только чтением / отложено**: lang Instance serialize/cloud uses имена ключей
+  (QByteArray key/value), не ordinal indices; реальные tdata/lang runtime ещё
+  не запускались. PNG composition/transforms, QSvgRenderer validation и отдельный
+  --render-svg, emoji QPainter/font/WebP sprites — этап 5. SVG crate не задан
+  PLAN.md: варианты usvg/resvg + tiny-skia или отдельный backend, выбор не сделан.
+  --render-svg/непустой --images возвращают явную error 910, не успешную заглушку.
+  PNG 1x/2x/3x и SVG payload сохранены без изменения с modifiers в IconSource;
+  pixel parity не заявлена. Готовые emoji_*.webp не пересоздавались.
+- Отличия выдачи: Rust getter возвращает значение вместо C++ reference и читает
+  scale при вызове вместо C++ init-фазы; будущий UI фиксирует scale/palette на
+  одну generation. Деревья switch заменены таблицами; lookup/plural/reactive
+  функции — контракт будущих tg-ui/tg-core, перечислен в README. Ошибки —
+  fail-fast Result вместо ostream chains; исходный silent rejection имеет code=0,
+  CLI сохраняет отсутствие сообщения и failure exit. Форматы входов не менялись.
+- Три проверки на закреплённом Rust через команду PORTING.md: **fmt --check exit 0**,
+  **clippy --workspace --all-targets -- -D warnings exit 0**, **test --workspace exit 0**;
+  **457 passed, 0 failed, 0 ignored**, без двойного подсчёта дочернего helper.
+  tg-codegen: **33 теста** (24 format/edge, 5 native reference, 3 compile-real,
+  1 CLI). Лог /tmp/codegen-verified-checks.log, fmt отдельно /tmp/codegen-verified-fmt.log.
+- Последовательный замер без других сборок на Rust 1.95.0: styles+palette
+  **8.711 с** генерация / **44.706 с** rustc output compilation; lang **1.395 / 9.122 с**;
+  emoji **0.293 / 2.682 с**. Определения/команда/ограничения замера — в README,
+  лог /tmp/codegen-benchmark-final.log.
+- Cargo.lock не добавлен, push не выполнялся. Этап 2 не начат.
+
+## Итог этапа 1
+
+Критерий PLAN.md: «портированные тесты lib_rpl и lib_base проходят;
+сериализация каждого типа TL-схемы совпадает с оригиналом на наборе образцов».
+
+| Пункт критерия / состава этапа 1 | Выполнен? | Подтверждение и граница |
+|---|---|---|
+| Портированные тесты lib_rpl | Да | Все 28 секций оригинала и собственные tests/doctests проходят в workspace. |
+| Портированные тесты lib_base | Да, для перенесённой части | Все 14 исходных секций + tests переносимых модулей; tg-base 231 проверка, 0 ошибок. Графические/платформенные файлы ниже остаются partial/todo. |
+| TL: независимые образцы | Да, для набора покрытых форм | 37 reference_bytes tests, boundaries, flags/flags2, вложенные constructors, bytes/vector, Ayu hooks. |
+| TL: каждый тип против эталонного C++ исполнения | **Полностью не подтверждён** | all_definitions проходит всю схему и optional modes, но часть образцов построена по общей metadata парсера; это не native C++ oracle каждого типа. Независимый запуск оригинального TL writer на всех типах ещё нужен. |
+| tg-runtime | Переносимая часть да; есть partial | 56 tests и workspace checks; остаются reactive bridges и lifetime потока, см. список. |
+| tg-codegen common/style/lang/emoji | Переносимая обработка и Rust-выдача да; графика отложена | Все настоящие входы разобраны, вся выдача компилируется; native эталоны таблиц/значений совпали, 33 теста. Image backend/sprites — этап 5. |
+| Обязательные проверки на едином Rust | Да | Rust 1.95.0 закреплён для nix-shell/nix develop/CI; все три команды exit 0, 457 тестов. |
+
+**Этап 1 нельзя объявить безусловно закрытым целиком:** переносимые части и их
+проверки готовы, но строгий native TL criterion для каждого типа не доказан,
+а отложенные файлы остаются в реестре. Следующий MTProto этап в этой работе
+не начинался. Ниже полный список всех файлов с stage=1 и status=partial/todo
+после этой задачи: **174 файла**. Номер возврата — планируемый этап работы,
+столбец stage в ledger сохраняет исходную принадлежность файлу этапа 1.
+
+- `codegen/codegen/emoji/generator.cpp` → этап **5** → Все таблицы Rust сверены с native C++ arrays; writeImages/generateImage/QPainter/WebP sprites отложены, --images error 910.
+- `codegen/codegen/emoji/generator.h` → этап **5** → Все таблицы Rust сверены с native C++ arrays; writeImages/generateImage/QPainter/WebP sprites отложены, --images error 910.
+- `codegen/codegen/style/generator.cpp` → этап **5** → Rust structs/values/palette, scale и Ayu wide policy; PNG composition/transforms и SVG validation требуют графического backend.
+- `codegen/codegen/style/generator.h` → этап **5** → Rust structs/values/palette, scale и Ayu wide policy; PNG composition/transforms и SVG validation требуют графического backend.
+- `codegen/codegen/style/parsed_file.cpp` → этап **5** → Обработка всех реальных стилей и модификаторов проверена native IR; QImage GetModifier pixel transforms переданы будущему IconSource backend.
+- `codegen/codegen/style/parsed_file.h` → этап **5** → Обработка всех реальных стилей и модификаторов проверена native IR; QImage GetModifier pixel transforms переданы будущему IconSource backend.
+- `codegen/codegen/style/render_svg.cpp` → этап **5** → Отложен: SVG parser/backend ещё не выбран; tiny-skia — только rasterizer. --render-svg явно возвращает error 910.
+- `codegen/codegen/style/render_svg.h` → этап **5** → Отложен: SVG parser/backend ещё не выбран; tiny-skia — только rasterizer. --render-svg явно возвращает error 910.
+- `lib_base/base/base_file_utilities.cpp` → этап **5** → RegisterBundledResources: ресурсы/Qt .rcc заменяются ресурсной системой tg-window/tg-gfx.
+- `lib_base/base/base_file_utilities.h` → этап **5** → RegisterBundledResources: ресурсы/Qt .rcc заменяются ресурсной системой tg-window/tg-gfx.
+- `lib_base/base/battery_saving.cpp` → этап **6** → Generic helper, Option<bool> и поток значений проверены; Linux GPowerProfileMonitor/GLib требует этап 6. Фабрика backend явная.
+- `lib_base/base/battery_saving.h` → этап **6** → Generic helper, Option<bool> и поток значений проверены; Linux GPowerProfileMonitor/GLib требует этап 6. Фабрика backend явная.
+- `lib_base/base/crash_report_header.cpp` → этап **6** → Проверен owned-форматтер 64 КиБ; глобальный буфер и async-signal-safe публикация требуют аварийной подсистемы.
+- `lib_base/base/crash_report_header.h` → этап **6** → Проверен owned-форматтер 64 КиБ; глобальный буфер и async-signal-safe публикация требуют аварийной подсистемы.
+- `lib_base/base/crash_report_writer.cpp` → этап **6** → Отложен: SIGSEGV/backtrace/ucontext, аварийный fd, аннотации, внешняя crash-подсистема; unsafe запрещён.
+- `lib_base/base/crash_report_writer.h` → этап **6** → Отложен: SIGSEGV/backtrace/ucontext, аварийный fd, аннотации, внешняя crash-подсистема; unsafe запрещён.
+- `lib_base/base/custom_app_icon.h` → этап **5** → Linux path/digest/clear None/false проверены; overload QImage ждёт tg-gfx этапа 5, mac — этап 10.
+- `lib_base/base/event_filter.cpp` → этап **5** → Отложен: Доставка/отмена событий и parent lifetime: tg-window dispatcher; используется виджетами и LastUserInput.
+- `lib_base/base/event_filter.h` → этап **5** → Отложен: Доставка/отмена событий и parent lifetime: tg-window dispatcher; используется виджетами и LastUserInput.
+- `lib_base/base/file_lock_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/global_shortcuts.h` → этап **6** → Отложен: native key descriptors/names, запись сочетаний и источник системных событий; клиент calls, запись PTT; tg-window этап 5, X11 backend этап 6.
+- `lib_base/base/global_shortcuts_generic.cpp` → этап **6** → Отложен: native key descriptors/names, запись сочетаний и источник системных событий; клиент calls, запись PTT; tg-window этап 5, X11 backend этап 6.
+- `lib_base/base/global_shortcuts_generic.h` → этап **6** → Отложен: native key descriptors/names, запись сочетаний и источник системных событий; клиент calls, запись PTT; tg-window этап 5, X11 backend этап 6.
+- `lib_base/base/integration.cpp` → этап **5** → Logging singleton и ExecutableInfo/std::env проверены; enterFromEventLoop и crash annotations требуют launcher/tg-window (5/6).
+- `lib_base/base/integration.h` → этап **5** → Logging singleton и ExecutableInfo/std::env проверены; enterFromEventLoop и crash annotations требуют launcher/tg-window (5/6).
+- `lib_base/base/last_user_input.cpp` → этап **5** → Приоритет provider и отметка ввода проверены; tg-window event filter (5), XCB/Mutter (6) отложены.
+- `lib_base/base/last_user_input.h` → этап **5** → Приоритет provider и отметка ввода проверены; tg-window event filter (5), XCB/Mutter (6) отложены.
+- `lib_base/base/network_reachability.cpp` → этап **6** → Общий приоритет/поток доступности проверен; обязательный источник заменяет отсутствующий QNetworkInformation backend (этап 6).
+- `lib_base/base/network_reachability.h` → этап **6** → Общий приоритет/поток доступности проверен; обязательный источник заменяет отсутствующий QNetworkInformation backend (этап 6).
+- `lib_base/base/object_ptr.h` → этап **5** → Отложен: Родитель QObject, QPointer обнуление, hide/deleteLater: хранилище виджетов tg-window; Box не сохраняет контракт.
+- `lib_base/base/platform/base_platform_custom_app_icon.h` → этап **5** → Linux path/digest/clear проверены; overload QImage ждёт tg-gfx этапа 5.
+- `lib_base/base/platform/base_platform_file_utilities.h` → этап **6** → Linux операции fs и current executable проверены; ShowInFolder + ресурсы требуют desktop backend.
+- `lib_base/base/platform/base_platform_global_shortcuts.h` → этап **6** → Отложен: глобальные события, native descriptors и их display names.
+- `lib_base/base/platform/base_platform_haptic.h` → этап **6** → IsSwipeBackEnabled=true как на Linux; Haptic требует feedbackd D-Bus.
+- `lib_base/base/platform/base_platform_info.cpp` → этап **4** → Отложен: Qt Unicode CleanAndSimplify, UTF-16 длина и device model; нужен текстовый adapter для parity.
+- `lib_base/base/platform/base_platform_info.h` → этап **6** → Отложен: сведения ОС/сессии/локали, X11/Wayland, версия glibc; client launcher и device model.
+- `lib_base/base/platform/base_platform_last_input.h` → этап **6** → Инъекция provider и приоритет проверены; XCB/Mutter implementation отложена.
+- `lib_base/base/platform/base_platform_power_save_blocker.h` → этап **6** → Индексы типов, WindowId и backend trait; реальный Inhibit/XCB отложен.
+- `lib_base/base/platform/base_platform_process.h` → этап **6** → Отложен: активация окна процесса, native WId и desktop connection.
+- `lib_base/base/platform/base_platform_system_media_controls.h` → этап **7** → Отложен: MPRIS и команды медиаплеера, metadata/artwork, tg-gfx; Linux backend этап 6/7.
+- `lib_base/base/platform/base_platform_url_scheme.h` → этап **6** → Отложен: desktop registration, Gio AppInfo, Flatpak/Snap и URL launcher.
+- `lib_base/base/platform/linux/base_battery_saving_linux.cpp` → этап **6** → GLib/GPowerProfileMonitor, notify callback через enterFromEventLoop; sysfs battery probe.
+- `lib_base/base/platform/linux/base_battery_saving_linux.h` → этап **6** → GLib/GPowerProfileMonitor, notify callback через enterFromEventLoop; sysfs battery probe.
+- `lib_base/base/platform/linux/base_file_utilities_linux.cpp` → этап **6** → Проверены executable, rename overwrite, flush/sync, recursive delete (включая исходную ошибку symlink), Linux identity/no-op. ShowInFolder D-Bus/portal и BundledResourcesPath отложены.
+- `lib_base/base/platform/linux/base_file_utilities_linux.h` → этап **6** → Проверены executable, rename overwrite, flush/sync, recursive delete (включая исходную ошибку symlink), Linux identity/no-op. ShowInFolder D-Bus/portal и BundledResourcesPath отложены.
+- `lib_base/base/platform/linux/base_global_shortcuts_linux.cpp` → этап **6** → XCB RECORD, xkbcommon имена клавиш, QSocketNotifier; источник событий tg-window.
+- `lib_base/base/platform/linux/base_global_shortcuts_linux.h` → этап **6** → XCB RECORD, xkbcommon имена клавиш, QSocketNotifier; источник событий tg-window.
+- `lib_base/base/platform/linux/base_haptic_linux.cpp` → этап **6** → feedbackd org.sigxcpu.Feedback, desktop application id; константа swipe находится в общем модуле.
+- `lib_base/base/platform/linux/base_haptic_linux.h` → этап **6** → feedbackd org.sigxcpu.Feedback, desktop application id; константа swipe находится в общем модуле.
+- `lib_base/base/platform/linux/base_info_linux.cpp` → этап **6** → DMI/sysfs, os-release/locale/uname, glibc, session backend, desktop environment.
+- `lib_base/base/platform/linux/base_info_linux.h` → этап **6** → DMI/sysfs, os-release/locale/uname, glibc, session backend, desktop environment.
+- `lib_base/base/platform/linux/base_last_input_linux.cpp` → этап **6** → MIT-SCREEN-SAVER XCB и Mutter IdleMonitor D-Bus, часы/приоритет fallback.
+- `lib_base/base/platform/linux/base_last_input_linux.h` → этап **6** → MIT-SCREEN-SAVER XCB и Mutter IdleMonitor D-Bus, часы/приоритет fallback.
+- `lib_base/base/platform/linux/base_linux_allocation_tracer.cpp` → этап **6** → Отложен: malloc hooks и адреса выделений, unsafe/FFI; безопасный tg-base не перехватывает allocator.
+- `lib_base/base/platform/linux/base_linux_allocation_tracer.h` → этап **6** → Отложен: malloc hooks и адреса выделений, unsafe/FFI; безопасный tg-base не перехватывает allocator.
+- `lib_base/base/platform/linux/base_linux_app_launch_context.cpp` → этап **6** → Gio AppLaunchContext, startup id/activation token и env.
+- `lib_base/base/platform/linux/base_linux_app_launch_context.h` → этап **6** → Gio AppLaunchContext, startup id/activation token и env.
+- `lib_base/base/platform/linux/base_linux_dbus_utilities.cpp` → этап **6** → NameHasOwner/ListActivatableNames/StartServiceByName и ServiceWatcher; допустим zbus, пока не добавлен.
+- `lib_base/base/platform/linux/base_linux_dbus_utilities.h` → этап **6** → NameHasOwner/ListActivatableNames/StartServiceByName и ServiceWatcher; допустим zbus, пока не добавлен.
+- `lib_base/base/platform/linux/base_linux_library.cpp` → этап **6** → dlopen/dlsym требуют unsafe: вынести FFI или заменить конечные API безопасными крейтами.
+- `lib_base/base/platform/linux/base_linux_library.h` → этап **6** → dlopen/dlsym требуют unsafe: вынести FFI или заменить конечные API безопасными крейтами.
+- `lib_base/base/platform/linux/base_linux_xcb_library.cpp` → этап **6** → Набор динамических XCB symbols; нужен безопасный X11 backend, tg-window, этап 5/6.
+- `lib_base/base/platform/linux/base_linux_xcb_library.h` → этап **6** → Набор динамических XCB symbols; нужен безопасный X11 backend, tg-window, этап 5/6.
+- `lib_base/base/platform/linux/base_linux_xcb_utilities.cpp` → этап **6** → Соединение, native event filter, atom/window/property, mask lifetime; tg-window X11 backend.
+- `lib_base/base/platform/linux/base_linux_xcb_utilities.h` → этап **6** → Соединение, native event filter, atom/window/property, mask lifetime; tg-window X11 backend.
+- `lib_base/base/platform/linux/base_linux_xdg_activation_token.cpp` → этап **6** → Wayland xdg activation и активное окно; tg-window stage 5.
+- `lib_base/base/platform/linux/base_linux_xdg_activation_token.h` → этап **6** → Wayland xdg activation и активное окно; tg-window stage 5.
+- `lib_base/base/platform/linux/base_linux_xdp_utilities.cpp` → этап **6** → Portal Settings watch, parent window export X11/Wayland; tg-window + D-Bus.
+- `lib_base/base/platform/linux/base_linux_xdp_utilities.h` → этап **6** → Portal Settings watch, parent window export X11/Wayland; tg-window + D-Bus.
+- `lib_base/base/platform/linux/base_linux_xsettings.cpp` → этап **6** → XSETTINGS property parser/cache, XCB events, QColor; tg-window + tg-gfx.
+- `lib_base/base/platform/linux/base_linux_xsettings.h` → этап **6** → XSETTINGS property parser/cache, XCB events, QColor; tg-window + tg-gfx.
+- `lib_base/base/platform/linux/base_power_save_blocker_linux.cpp` → этап **6** → Portal Inhibit/Request.Close, parent window export и XCB screensaver reset раз в 10 с.
+- `lib_base/base/platform/linux/base_power_save_blocker_linux.h` → этап **6** → Portal Inhibit/Request.Close, parent window export и XCB screensaver reset раз в 10 с.
+- `lib_base/base/platform/linux/base_process_linux.cpp` → этап **6** → X11 _NET_ACTIVE_WINDOW/_NET_WM_USER_TIME, Wayland activation; нет window ids.
+- `lib_base/base/platform/linux/base_process_linux.h` → этап **6** → X11 _NET_ACTIVE_WINDOW/_NET_WM_USER_TIME, Wayland activation; нет window ids.
+- `lib_base/base/platform/linux/base_screen_reader_state_linux.cpp` → этап **6** → AT-SPI/org.a11y.Status, watchers и GLib callback delivery; accessibility stage 5.
+- `lib_base/base/platform/linux/base_screen_reader_state_linux.h` → этап **6** → AT-SPI/org.a11y.Status, watchers и GLib callback delivery; accessibility stage 5.
+- `lib_base/base/platform/linux/base_system_media_controls_linux.cpp` → этап **7** → MPRIS org.mpris.MediaPlayer2, playback/seek/artwork/URI metadata; player + gfx stage 7.
+- `lib_base/base/platform/linux/base_url_scheme_linux.cpp` → этап **6** → Gio DesktopAppInfo, Snap settings, .desktop и sandbox; регистрация tg:// из launcher.
+- `lib_base/base/platform/linux/base_url_scheme_linux.h` → этап **6** → Gio DesktopAppInfo, Snap settings, .desktop и sandbox; регистрация tg:// из launcher.
+- `lib_base/base/platform/mac/base_battery_saving_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_battery_saving_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_confirm_quit.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_confirm_quit.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_custom_app_icon_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_custom_app_icon_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_file_utilities_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_file_utilities_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_global_shortcuts_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_global_shortcuts_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_haptic_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_haptic_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_info_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_info_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_last_input_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_last_input_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_layout_switch_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_layout_switch_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_network_reachability_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_power_save_blocker_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_power_save_blocker_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_process_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_process_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_screen_reader_state_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_screen_reader_state_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_system_media_controls_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_system_unlock_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_system_unlock_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_url_scheme_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_url_scheme_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_utilities_mac.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/mac/base_utilities_mac.mm` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_battery_saving_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_battery_saving_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_file_utilities_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_file_utilities_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_global_shortcuts_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_global_shortcuts_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_haptic_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_haptic_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_info_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_info_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_last_input_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_last_input_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_layout_switch_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_layout_switch_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_network_reachability_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_power_save_blocker_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_power_save_blocker_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_process_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_process_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_screen_reader_state_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_screen_reader_state_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_system_media_controls_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_system_unlock_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_system_unlock_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_url_scheme_win.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_url_scheme_win.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_co_task_mem.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_gdiplus_h.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_rpcndr_h.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_safe_library.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_safe_library.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_shlobj_h.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_winrt.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_winrt.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_wrl.cpp` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/base_windows_wrl.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/wrl/wrl_implements_h.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/platform/win/wrl/wrl_module_h.h` → этап **10** → Нативный macOS/Windows backend, профильная ОС/toolchain и тесты; файл в этой работе не менялся.
+- `lib_base/base/power_save_blocker.cpp` → этап **6** → Группы блокировок, перевыбор окна и backend trait проверены fake backend; portal Inhibit/XCB требует этап 6.
+- `lib_base/base/power_save_blocker.h` → этап **6** → Группы блокировок, перевыбор окна и backend trait проверены fake backend; portal Inhibit/XCB требует этап 6.
+- `lib_base/base/qt/qt_common_adapters.h` → этап **5** → Отложен: TouchDevice зависит от модели устройств ввода tg-window.
+- `lib_base/base/qt/qt_compare.h` → этап **4** → Отложен: Ord/PartialOrd покрывают Vec/enum; порядок QString — UTF-16, не String::cmp. Отложено до миграции текстовых call sites этапа 4/5.
+- `lib_base/base/qt/qt_key_modifiers.h` → этап **5** → Отложен: Глобальное состояние клавиатуры tg-window; сравнение равно одному модификатору, а не contains.
+- `lib_base/base/qt/qt_string_view.h` → этап **4** → Отложен: StringViewMid принимает отрицательные индексы, UTF-16 и null/empty; нужен текстовый adapter, этап 4/5.
+- `lib_base/base/qt/qt_tab_key.cpp` → этап **5** → Отложен: Цепочка фокуса, Tab/Backtab и фильтр событий tg-window.
+- `lib_base/base/qt/qt_tab_key.h` → этап **5** → Отложен: Цепочка фокуса, Tab/Backtab и фильтр событий tg-window.
+- `lib_base/base/qt_connection.h` → этап **5** → Отложен: QObject connect/disconnect, queued delivery и уничтожение sender/receiver: tg-window.
+- `lib_base/base/qt_signal_producer.h` → этап **5** → Отложен: Qt signal-to-rpl bridge с enterFromEventLoop: tg-window + tg-rpl, одного EventStream недостаточно.
+- `lib_base/base/qthelp_regex.h` → этап **4** → Полный PCRE контракт против regex, lookaround/backreferences, UTF-16 offsets и поведение $; совместимость клиентских вызовов.
+- `lib_base/base/random.cpp` → этап **2** → При интеграции криптографии проверить OS RNG вместо RAND_seed; исходный seed не используется и это описанное отличие.
+- `lib_base/base/random.h` → этап **2** → При интеграции криптографии проверить OS RNG вместо RAND_seed; исходный seed не используется и это описанное отличие.
+- `lib_base/base/screen_reader_state.cpp` → этап **5** → Generic observer/Variable проверен; QAccessible adapter (5) и Linux AT-SPI D-Bus (6) отложены.
+- `lib_base/base/screen_reader_state.h` → этап **5** → Generic observer/Variable проверен; QAccessible adapter (5) и Linux AT-SPI D-Bus (6) отложены.
+- `lib_base/base/single_instance.cpp` → этап **6** → Linux UnixStream/FileLock, Qt-имя и обмен проверены; автоматическая readiness-доставка и активация PID/WId требуют tg-window.
+- `lib_base/base/single_instance.h` → этап **6** → Linux UnixStream/FileLock, Qt-имя и обмен проверены; автоматическая readiness-доставка и активация PID/WId требуют tg-window.
+- `lib_base/base/unique_qptr.h` → этап **5** → Отложен: QPointer плюс владение/очистка QObject: хранилище tg-window.
+- `lib_base/base/weak_qptr.h` → этап **5** → Отложен: Автоматическое обнуление и const observer QObject: tg-window IDs/generations.
+- `lib_base/base/zlib_help.h` → этап **6** → ZIP64 writer, parity сжатых bytes и minizip text heuristic для тем/языковых архивов.
+- `lib_crl/crl/common/crl_common_object_async.h` → этап **4** → producer/producer_on_main bridge с tg-rpl, контракт with(&mut T); tg-runtime сейчас не менялся.
+- `lib_crl/crl/crl_object_on_thread.cpp` → этап **4** → Согласовать lifetime фонового потока: в Rust завершается после drop объекта, C++ оставляет его навсегда; runtime tests.
+- `lib_crl/crl/crl_object_on_thread.h` → этап **4** → Согласовать lifetime фонового потока: в Rust завершается после drop объекта, C++ оставляет его навсегда; runtime tests.
+- `lib_crl/crl/crl_on_main.h` → этап **5** → Обёртка callback subscription on_main_update_requests в rpl::producer и связь с оконным loop.
