@@ -92,3 +92,19 @@ impl Pause {
         rx
     }
 }
+fn global_pause() -> &'static std::sync::Mutex<Pause> {
+    static PAUSE: std::sync::OnceLock<std::sync::Mutex<Pause>> = std::sync::OnceLock::new();
+    PAUSE.get_or_init(|| std::sync::Mutex::new(Pause::default()))
+}
+pub fn paused() -> bool {
+    global_pause().lock().unwrap().paused()
+}
+pub fn pause() {
+    global_pause().lock().unwrap().pause();
+}
+pub fn unpause() {
+    global_pause().lock().unwrap().unpause();
+}
+pub fn unpaused() -> tokio::sync::mpsc::UnboundedReceiver<()> {
+    global_pause().lock().unwrap().unpaused()
+}

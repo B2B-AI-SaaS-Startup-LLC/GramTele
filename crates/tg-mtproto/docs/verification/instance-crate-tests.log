@@ -1,0 +1,91 @@
+warning: Git tree '/home/yarik/Projects/ayugram-rs-wt/mtproto-instance' is dirty
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-instance/crates/tg-mtproto)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.91s
+     Running unittests src/lib.rs (target/debug/deps/tg_mtproto-f36b406bc3cd365a)
+
+running 61 tests
+test details::mtproto_dc_key_creator::tests::dh_bad_encrypted_length ... ok
+test details::mtproto_dc_key_creator::tests::dh_fail_nonce ... ok
+test details::mtproto_dc_key_creator::tests::dh_fail_hash ... ok
+test details::mtproto_dc_key_creator::tests::dh_cannot_decrypt ... ok
+test details::mtproto_dc_key_creator::tests::dh_fail_valid_hash ... ok
+test details::mtproto_dc_key_creator::tests::dh_ok_outer_nonce ... ok
+test details::mtproto_dc_key_creator::tests::gen_fail_valid_hash ... ok
+test details::mtproto_dc_key_creator::tests::dh_inner_hash ... ok
+test details::mtproto_dc_key_creator::tests::gen_retry_limit ... ok
+test details::mtproto_dc_key_creator::tests::dh_inner_nonce ... ok
+test details::mtproto_dc_key_creator::tests::dh_prime_rejection ... ok
+test details::mtproto_dc_key_creator::tests::gen_wrong_hashes ... ok
+test details::mtproto_dc_key_creator::tests::malformed_tl_is_terminal ... ok
+test details::mtproto_dc_key_creator::tests::pq_factor_bytes_match_original_padding ... ok
+test details::mtproto_dc_key_creator::tests::gen_wrong_nonces ... ok
+test details::mtproto_dc_key_creator::tests::pq_wrong_nonce ... ok
+test details::mtproto_dc_key_creator::tests::start_twice ... ok
+test details::mtproto_dc_key_creator::tests::unexpected_stage ... ok
+test details::mtproto_dc_key_creator::tests::rsa_pad_too_large ... ok
+test details::mtproto_dc_key_creator::tests::unknown_public_key ... ok
+test mtp_instance::tests::document_and_channel_helpers_preserve_exact_message_selection ... ok
+test mtp_instance::tests::after_request_retains_identity_until_last_dependent_finishes ... ok
+test mtp_instance::tests::proxy_checker_candidates_completion_and_cancellation ... ok
+test mtp_instance::tests::guest_authorization_exports_imports_and_releases_waiters ... ok
+test details::mtproto_received_ids_manager::tests::window ... ok
+test mtp_instance::tests::config_enumeration_and_special_attempts_use_virtual_timers ... ok
+test mtp_instance::tests::key_write_identity_destroyer_slots_and_protocol_lifecycle ... ok
+test mtp_instance::tests::instance_routing_callbacks_delays_and_sender_ownership ... ok
+test mtp_instance::tests::resumable_file_chunks_limits_and_content_hash ... ok
+test mtp_instance::tests::malformed_typed_reply_calls_fail_after_done_parser ... ok
+test session_private::machine::tests::bad_msg_every_code_and_unknown_request ... ok
+test session_private::machine::tests::binding_success_failure_persistent_age_and_key_destruction ... ok
+test session_private::machine::tests::bounded_ack_cache_service_ownership_and_registered_preferences ... ok
+test session_private::machine::tests::connection_priority_failover_options_and_cdn_gating ... ok
+test session_private::machine::tests::container_limits_invoke_after_layer_and_sequence_wrap ... ok
+test session_private::machine::tests::detailed_info_duplicate_old_and_new_session ... ok
+test details::mtproto_dc_key_creator::tests::dh_bad_ga ... ok
+test session_private::machine::tests::duplex_server_bad_messages_salt_new_session_gzip_and_containers ... ok
+test session_private::machine::tests::duplex_server_cdn_key_without_permanent_binding ... ok
+test session_private::machine::tests::duplex_server_creates_persistent_and_temp_key_retries_binds_and_delivers_rpc ... ok
+test session_private::machine::tests::duplex_server_reconnect_resend_salt_ack_and_rpc_main_order ... ok
+test session_private::machine::tests::duplex_server_state_requests_resend_requests_and_acks ... ok
+test session_private::machine::tests::gzip_container_budget_parse_errors_and_replay_window ... ok
+test session_private::machine::tests::identity_replacement_special_ids_rpc_gzip_and_bad_time_paths ... ok
+test session_private::machine::tests::initial_salt_ping_sequence_and_rpc_delivery ... ok
+test session_private::machine::tests::instance_tests::concurrent_sender_dispatch_lifetime_and_typed_callback_forms ... ok
+test session_private::machine::tests::instance_tests::dedicated_upload_get_file_uses_session_and_checks_downloaded_hash ... ok
+test session_private::machine::tests::instance_tests::delayed_initial_request_keeps_deadline_and_send_delayed_flushes ... ok
+test session_private::machine::tests::instance_tests::environment_bridge_has_no_ownership_cycle_and_handler_replacement_survives ... ok
+test session_private::machine::tests::instance_tests::guest_authorization_crosses_two_real_sessions_in_memory ... ok
+test session_private::machine::tests::instance_tests::instance_two_dcs_use_real_sessions_and_independent_tcp_server ... ok
+test session_private::machine::tests::key_creation_variants_cdn_and_data_owner_contract ... ok
+test session_private::machine::tests::remaining_owner_proxy_timeout_and_clock_contracts ... ok
+test session_private::machine::tests::salt_ack_resend_and_message_states ... ok
+test session_private::machine::tests::session_controller_main_queue_lifecycle_options_and_cancellation ... ok
+test session_private::machine::tests::session_data_options_keys_and_notifications ... ok
+test session_private::machine::tests::source_log_version_timezone_and_protocol_dc_rules ... ok
+test session_private::machine::tests::state_requests_reply_info_and_cancellation ... ok
+test session_private::machine::tests::virtual_sent_checks_container_expiry_and_ping_timeout ... ok
+test session_private::machine::tests::virtual_timer_backoff_connection_selection_and_time_adjustment ... ok
+test mtproto_dh_utils::tests::prime_and_bounds ... ok
+
+test result: ok. 61 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.79s
+
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-instance/crates/tg-mtproto)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 23.45s
+     Running tests/simple_config.rs (target/debug/deps/simple_config-043f616a51d5fa4d)
+
+running 4 tests
+test phone_rules_json_and_txt ... ok
+test original_date_shape_and_attempt_http_fields ... ok
+test original_simple_config_signed_with_test_key ... ok
+test fallback_https_runner_uses_native_signed_sample_and_virtual_stagger ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Compiling tg-mtproto v0.0.0 (/home/yarik/Projects/ayugram-rs-wt/mtproto-instance/crates/tg-mtproto)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.24s
+     Running tests/sender_calls.rs (target/debug/deps/sender_calls-d6d3b85550e8008f)
+
+running 1 test
+test five_real_client_request_shapes_compile_and_keep_response_types ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

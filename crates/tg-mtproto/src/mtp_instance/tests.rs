@@ -5,7 +5,6 @@ fn test_instance() -> Instance {
 }
 #[test]
 fn instance_routing_callbacks_delays_and_sender_ownership() {
-    tg_runtime::main_queue().bind_current_thread();
     let instance = test_instance();
     instance.start();
     assert_eq!(instance.main_dc_id(), 2);
@@ -103,5 +102,380 @@ fn malformed_typed_reply_calls_fail_after_done_parser() {
     assert_eq!(
         *called.lock().unwrap(),
         vec!["CLIENT_RESPONSE_PARSE_FAILED"]
+    );
+}
+#[test]
+fn guest_authorization_exports_imports_and_releases_waiters() {
+    let instance = test_instance();
+    let id = instance.send(
+        &tg_scheme::HelpGetNearestDc::new(),
+        ResponseHandler::default(),
+        20001,
+        0,
+        0,
+        0,
+    );
+    let response = Response {
+        request_id: id,
+        ..Response::default()
+    };
+    assert!(instance.on_error_default(
+        &Error {
+            code: 401,
+            kind: "AUTH_KEY_UNREGISTERED".into(),
+            description: String::new()
+        },
+        &response
+    ));
+    let export = *instance
+        .state
+        .lock()
+        .unwrap()
+        .exports
+        .keys()
+        .next()
+        .unwrap();
+    let result = tg_scheme::mtp_auth_exported_authorization(123, b"authorization".to_vec());
+    instance.process_callback(&Response {
+        request_id: export,
+        reply: serialize(&result),
+        ..Response::default()
+    });
+    let import = {
+        let s = instance.state.lock().unwrap();
+        *s.routes
+            .iter()
+            .find(|(r, dc)| **r != id && **dc == 20001)
+            .unwrap()
+            .0
+    };
+    instance.import_done(&Response {
+        request_id: import,
+        ..Response::default()
+    });
+    assert!(instance.state.lock().unwrap().waiters[&1].is_empty());
+    assert_eq!(instance.state.lock().unwrap().routes[&id], 20001);
+    instance.cancel(import);
+    instance.cancel(id);
+    instance.shutdown();
+}
+#[test]
+fn config_enumeration_and_special_attempts_use_virtual_timers() {
+    use crate::{config_loader::ConfigLoader, special_config_request::*};
+    use std::rc::Rc;
+    use tg_base::timer::{ManualClock, TimerHost};
+    struct Random;
+    impl crate::core_types::Random for Random {
+        fn fill(&mut self, b: &mut [u8]) {
+            b.fill(27);
+        }
+    }
+    let clock = Arc::new(ManualClock::new(100));
+    let host = TimerHost::new(clock.clone());
+    let instance = test_instance();
+    let mut loader = ConfigLoader::new(instance.clone(), "+7".into(), false, &host);
+    loader.load();
+    let first = instance.take_session_spawns();
+    assert_eq!(first.front().unwrap().id, 2);
+    clock.advance(7999);
+    host.process();
+    assert!(loader.process(&mut Random).is_empty());
+    assert!(instance.take_session_spawns().is_empty());
+    clock.advance(1);
+    host.process();
+    loader.process(&mut Random);
+    let next = instance.take_session_spawns();
+    assert_eq!(next.len(), 1);
+    assert_ne!(next[0].id, 2);
+    let endpoint = Endpoint {
+        dc_id: 2,
+        ip: "127.0.0.1".into(),
+        port: 443,
+        secret: vec![],
+    };
+    loader.add_special_endpoint(endpoint);
+    clock.advance(1);
+    host.process();
+    loader.process(&mut Random);
+    assert!(instance.take_session_spawns().iter().any(|x| x.id == 1002));
+    loader.set_proxy_enabled(true);
+    loader.set_phone("+44".into());
+    let mut attempts = SpecialConfigRequest::new(true, false, &host, &mut Random);
+    assert!(attempts.send_next_request().is_some());
+    assert!(attempts.send_next_request().is_none());
+    clock.advance(799);
+    host.process();
+    assert!(attempts.send_next_request().is_none());
+    clock.advance(1);
+    host.process();
+    assert!(attempts.send_next_request().is_some());
+    assert!(attempts.send_next_request().is_none());
+    let _ = Rc::strong_count(&host);
+}
+#[test]
+fn proxy_checker_candidates_completion_and_cancellation() {
+    use crate::{
+        connection_abstract::TransportError,
+        mtproto_proxy_data::{ProxyData, Type},
+        proxy_check::ProxyCheckers,
+        session::{SessionTransport, TransportEvent},
+        session_private::TransportAction,
+    };
+    #[derive(Default)]
+    struct Capture(Vec<TransportAction>);
+    impl SessionTransport for Capture {
+        fn submit(&mut self, a: TransportAction) -> Result<(), TransportError> {
+            self.0.push(a);
+            Ok(())
+        }
+        async fn next_event(&mut self) -> Result<TransportEvent, TransportError> {
+            std::future::pending().await
+        }
+    }
+    let instance = test_instance();
+    let mut transport = Capture::default();
+    let mut check = ProxyCheckers::default();
+    check
+        .start_proxy_check(
+            &instance,
+            &ProxyData {
+                kind: Type::Socks5,
+                ..Default::default()
+            },
+            true,
+            100,
+            &mut transport,
+        )
+        .unwrap();
+    assert!(check.has_proxy_checkers());
+    let ids: Vec<_> = transport
+        .0
+        .iter()
+        .filter_map(|a| {
+            if let TransportAction::Connect(spec) = a {
+                Some(spec.id)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(!ids.is_empty());
+    assert_eq!(
+        check.process_event(
+            &TransportEvent::Connected {
+                id: ids[0],
+                tag: "TCP".into(),
+                full_timeout: 8000
+            },
+            120
+        ),
+        Some((ids[0], Ok(20)))
+    );
+    assert_eq!(
+        check.process_event(&TransportEvent::Error(ids[0], -444), 130),
+        Some((ids[0], Err(())))
+    );
+    check.drop_proxy_checker(ids[0], &mut transport).unwrap();
+    check.reset_proxy_checkers(&mut transport).unwrap();
+    assert!(!check.has_proxy_checkers());
+    check
+        .start_proxy_check(
+            &instance,
+            &ProxyData {
+                kind: Type::Web,
+                ..Default::default()
+            },
+            false,
+            200,
+            &mut transport,
+        )
+        .unwrap();
+    assert!(!check.has_proxy_checkers());
+}
+#[test]
+fn resumable_file_chunks_limits_and_content_hash() {
+    use crate::dedicated_file_loader::*;
+    let path = std::env::temp_dir().join(format!("ayugram-dedicated-{}", get_next_request_id()));
+    std::fs::create_dir_all(&path).unwrap();
+    let file = path.join("file.bin");
+    std::fs::write(&file, b"abcdef").unwrap();
+    let mut output = AbstractDedicatedLoader::new(file.clone(), 4);
+    output.validate_output().unwrap();
+    assert_eq!(output.already_size(), 4);
+    assert_eq!(std::fs::read(&file).unwrap(), b"abcd");
+    output.write_chunk(b"efgh", 8).unwrap();
+    assert_eq!(output.total_size(), 8);
+    assert_eq!(
+        tg_base::openssl_help::sha256(&std::fs::read(&file).unwrap()),
+        tg_base::openssl_help::sha256(b"abcdefgh")
+    );
+    assert!(matches!(
+        output.take_events().back(),
+        Some(LoaderEvent::Ready(_))
+    ));
+    assert!(output.write_chunk(&[], MAX_FILE_SIZE + 1).is_err());
+    assert!(!output.prefer_percent());
+    std::fs::write(path.join("other"), b"x").unwrap();
+    output.wipe_folder().unwrap();
+    assert!(!path.join("other").exists());
+    assert_eq!(
+        Progress {
+            already: 1,
+            size: 2,
+            percent: false
+        },
+        Progress {
+            already: 1,
+            size: 2,
+            percent: true
+        }
+    );
+    assert!(
+        Progress::default()
+            < Progress {
+                already: 1,
+                ..Default::default()
+            }
+    );
+    std::fs::remove_dir_all(path).unwrap();
+}
+#[test]
+fn after_request_retains_identity_until_last_dependent_finishes() {
+    let instance = test_instance();
+    let first = instance.send(
+        &tg_scheme::HelpGetConfig::new(),
+        ResponseHandler::default(),
+        0,
+        0,
+        0,
+        0,
+    );
+    let second = instance.send(
+        &tg_scheme::HelpGetConfig::new(),
+        ResponseHandler::default(),
+        0,
+        0,
+        first,
+        0,
+    );
+    let (first_handle, second_handle) = {
+        let s = instance.state.lock().unwrap();
+        (s.requests[&first], s.requests[&second])
+    };
+    instance.unregister_request(first);
+    assert!(instance.store.lock().unwrap().get(first_handle).is_some());
+    assert_eq!(
+        instance
+            .store
+            .lock()
+            .unwrap()
+            .get(second_handle)
+            .unwrap()
+            .after,
+        Some(first_handle)
+    );
+    instance.unregister_request(second);
+    assert!(instance.store.lock().unwrap().get(first_handle).is_none());
+    assert!(instance.store.lock().unwrap().get(second_handle).is_none());
+}
+#[test]
+fn key_write_identity_destroyer_slots_and_protocol_lifecycle() {
+    use crate::mtproto_auth_key::KeyType;
+    let instance = test_instance();
+    let key = Arc::new(AuthKey::new(KeyType::Generated, 2, [9; 256], 1));
+    instance.dc_persistent_key_changed(2, Some(key.clone()));
+    assert_eq!(instance.get_keys_for_write()[0].key_id(), key.key_id());
+    assert!(instance.take_notices().contains(&Notice::WriteKeys));
+    instance.dc_persistent_key_changed(2, Some(key));
+    assert!(!instance.take_notices().contains(&Notice::WriteKeys));
+    instance.dc_persistent_key_changed(
+        1002,
+        Some(Arc::new(AuthKey::new(
+            KeyType::Generated,
+            1002,
+            [9; 256],
+            1,
+        ))),
+    );
+    assert_eq!(instance.get_keys_for_write().len(), 1);
+    instance.dc_persistent_key_changed(2, None);
+    assert!(instance.get_keys_for_write().is_empty());
+    let mut fields = Fields::new(Environment::Test);
+    fields.main_dc_id = -1;
+    let destroyer = Instance::new(Mode::KeysDestroyer, fields);
+    destroyer.add_keys_for_destroy(vec![
+        Arc::new(AuthKey::new(KeyType::Generated, 2, [1; 256], 1)),
+        Arc::new(AuthKey::new(KeyType::Generated, 2, [2; 256], 1)),
+    ]);
+    let ids = destroyer
+        .state
+        .lock()
+        .unwrap()
+        .keys
+        .keys()
+        .copied()
+        .collect::<Vec<_>>();
+    assert_eq!(ids, vec![2560002, 2570002]);
+    for id in ids {
+        destroyer.process_event(InstanceEvent::KeyWasPossiblyDestroyed(id));
+    }
+    assert!(destroyer.get_keys_for_write().is_empty());
+    assert!(destroyer.take_notices().contains(&Notice::AllKeysDestroyed));
+    destroyer.shutdown();
+}
+#[test]
+fn document_and_channel_helpers_preserve_exact_message_selection() {
+    use crate::dedicated_file_loader::*;
+    let document = tg_scheme::Document::Document(Arc::new(tg_scheme::DocumentData {
+        id: 11,
+        access_hash: 12,
+        size: 13,
+        dc_id: 2,
+        attributes: vec![tg_scheme::mtp_document_attribute_filename(
+            b"file.bin".to_vec(),
+        )],
+        ..Default::default()
+    }));
+    let media = tg_scheme::MessageMedia::MessageMediaDocument(Arc::new(
+        tg_scheme::MessageMediaDocumentData {
+            flags: tg_scheme::MessageMediaDocumentData::F_DOCUMENT,
+            document: Some(document),
+            ..Default::default()
+        },
+    ));
+    let message = tg_scheme::Message::Message(Arc::new(tg_scheme::MessageData {
+        id: 7,
+        flags: tg_scheme::MessageData::F_MEDIA,
+        media: Some(media),
+        ..Default::default()
+    }));
+    let list =
+        tg_scheme::MessagesMessages::MessagesMessages(Arc::new(tg_scheme::MessagesMessagesData {
+            messages: vec![message],
+            ..Default::default()
+        }));
+    assert!(get_messages_element(&list, 8).is_none());
+    assert!(get_messages_element(&list, 0).is_some());
+    let file = parse_file(&list, 7).unwrap();
+    assert_eq!(
+        (file.name, file.size, file.dc_id),
+        ("file.bin".into(), 13, 2)
+    );
+    assert!(parse_file(&list, 8).is_none());
+    let resolved = tg_scheme::ContactsResolvedPeer::ContactsResolvedPeer(Arc::new(
+        tg_scheme::ContactsResolvedPeerData {
+            peer: tg_scheme::mtp_peer_channel(42),
+            chats: vec![tg_scheme::Chat::Channel(Arc::new(tg_scheme::ChannelData {
+                id: 42,
+                flags: tg_scheme::ChannelData::F_ACCESS_HASH,
+                access_hash: Some(99),
+                ..Default::default()
+            }))],
+            ..Default::default()
+        },
+    ));
+    assert_eq!(
+        tg_tl::serialize(&extract_channel(&resolved).unwrap()),
+        tg_tl::serialize(&tg_scheme::mtp_input_channel(42, 99))
     );
 }

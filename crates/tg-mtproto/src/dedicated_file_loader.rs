@@ -157,7 +157,6 @@ pub struct DedicatedLoader {
     parts: Arc<Mutex<VecDeque<PartResult>>>,
     timer: Timer,
     due: Rc<Cell<bool>>,
-    failed: bool,
 }
 impl DedicatedLoader {
     pub fn new(
@@ -185,7 +184,6 @@ impl DedicatedLoader {
             parts: Arc::new(Mutex::new(VecDeque::new())),
             timer: Timer::in_host(host, Some(Rc::new(move || wake.set(true)))),
             due,
-            failed: false,
         }
     }
     pub fn start_loading(&mut self) -> io::Result<()> {
@@ -196,7 +194,7 @@ impl DedicatedLoader {
         Ok(())
     }
     pub fn send_request(&mut self) {
-        if self.failed || self.requests.len() >= 6 || self.offset >= self.size {
+        if self.requests.len() >= 6 || self.offset >= self.size {
             return;
         }
         let offset = self.offset;
@@ -254,9 +252,280 @@ impl DedicatedLoader {
                 Err(error) => Err(io::Error::other(error)),
             };
             if let Err(error) = result {
-                self.failed = true;
                 self.output.thread_safe_failed(error);
             }
         }
+    }
+}
+
+pub fn get_messages_element(
+    list: &tg_scheme::MessagesMessages,
+    id: i32,
+) -> Option<tg_scheme::Message> {
+    use tg_scheme::MessagesMessages::*;
+    let messages = match list {
+        MessagesMessages(d) => &d.messages,
+        MessagesMessagesSlice(d) => &d.messages,
+        MessagesChannelMessages(d) => &d.messages,
+        MessagesMessagesNotModified(_) => return None,
+    };
+    messages
+        .iter()
+        .find(|message| {
+            let actual = match message {
+                tg_scheme::Message::MessageEmpty(d) => d.id,
+                tg_scheme::Message::Message(d) => d.id,
+                tg_scheme::Message::MessageService(d) => d.id,
+            };
+            id == 0 || id == actual
+        })
+        .cloned()
+}
+pub fn parse_file(list: &tg_scheme::MessagesMessages, post_id: i32) -> Option<FileDescription> {
+    let tg_scheme::Message::Message(message) = get_messages_element(list, post_id)? else {
+        return None;
+    };
+    let tg_scheme::MessageMedia::MessageMediaDocument(media) = message.vmedia()? else {
+        return None;
+    };
+    let tg_scheme::Document::Document(document) = media.vdocument()? else {
+        return None;
+    };
+    let name = document.attributes.iter().find_map(|attribute| {
+        if let tg_scheme::DocumentAttribute::DocumentAttributeFilename(d) = attribute {
+            Some(String::from_utf8_lossy(&d.file_name).into_owned())
+        } else {
+            None
+        }
+    })?;
+    if name.is_empty() || document.size == 0 || document.size > MAX_FILE_SIZE {
+        return None;
+    }
+    Some(FileDescription {
+        name,
+        size: document.size,
+        dc_id: document.dc_id,
+        location: tg_scheme::mtp_input_document_file_location(
+            document.id,
+            document.access_hash,
+            document.file_reference.clone(),
+            vec![],
+        ),
+    })
+}
+pub fn extract_channel(
+    result: &tg_scheme::ContactsResolvedPeer,
+) -> Option<tg_scheme::InputChannel> {
+    let data = result.c_contacts_resolved_peer();
+    let tg_scheme::Peer::PeerChannel(peer) = &data.peer else {
+        return None;
+    };
+    data.chats.iter().find_map(|chat| {
+        if let tg_scheme::Chat::Channel(channel) = chat {
+            if channel.id == peer.channel_id {
+                return Some(tg_scheme::mtp_input_channel(
+                    channel.id,
+                    channel.vaccess_hash().unwrap_or_default(),
+                ));
+            }
+        }
+        None
+    })
+}
+type WeakFailure = Arc<dyn Fn(&crate::mtproto_response::Error) + Send + Sync>;
+pub struct WeakInstance {
+    pending: Arc<Mutex<std::collections::BTreeMap<i32, WeakFailure>>>,
+    sender: Sender,
+    owner: std::sync::Weak<()>,
+    alive: Arc<std::sync::atomic::AtomicBool>,
+}
+impl WeakInstance {
+    pub fn new(instance: Instance, owner: std::sync::Weak<()>) -> Self {
+        Self {
+            pending: Arc::new(Mutex::new(std::collections::BTreeMap::new())),
+            sender: Sender::new_weak(instance),
+            owner,
+            alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        }
+    }
+    pub fn valid(&self) -> bool {
+        self.owner.strong_count() > 0
+            && self.alive.load(std::sync::atomic::Ordering::Acquire)
+            && self.sender.upgrade_instance().is_some()
+    }
+    pub fn instance(&self) -> Option<Instance> {
+        if self.valid() {
+            self.sender.upgrade_instance()
+        } else {
+            None
+        }
+    }
+    pub fn session(&self) -> std::sync::Weak<()> {
+        self.owner.clone()
+    }
+    pub fn die(&self) {
+        self.alive
+            .store(false, std::sync::atomic::Ordering::Release);
+        let pending = std::mem::take(&mut *self.pending.lock().unwrap());
+        for (id, fail) in pending {
+            self.sender.cancel(id);
+            fail(&crate::mtproto_response::Error::local(
+                "UNAVAILABLE",
+                "MTP instance is not available.",
+            ));
+        }
+    }
+    pub fn process(&self) {
+        if !self.valid() {
+            self.die();
+        }
+    }
+    pub fn send<R: tg_tl::Function>(
+        &self,
+        request: R,
+        done: impl FnOnce(R::Response) + Send + 'static,
+        fail: impl Fn(&crate::mtproto_response::Error) + Send + Sync + 'static,
+        dc: i32,
+    ) where
+        R::Response: Send + 'static,
+    {
+        let fail: WeakFailure = Arc::new(fail);
+        if !self.valid() {
+            tg_runtime::on_main(move || {
+                fail(&crate::mtproto_response::Error::local(
+                    "UNAVAILABLE",
+                    "MTP instance is not available.",
+                ))
+            });
+            return;
+        }
+        let owner = self.owner.clone();
+        let alive = self.alive.clone();
+        let failure_owner = owner.clone();
+        let failure_alive = alive.clone();
+        let done_pending = self.pending.clone();
+        let fail_pending = self.pending.clone();
+        let report = fail.clone();
+        let id = self
+            .sender
+            .request(request)
+            .to_dc(dc)
+            .done_with_id(move |value, id| {
+                done_pending.lock().unwrap().remove(&id);
+                if owner.strong_count() > 0 && alive.load(std::sync::atomic::Ordering::Acquire) {
+                    done(value);
+                }
+            })
+            .fail_with_id(move |error, id| {
+                fail_pending.lock().unwrap().remove(&id);
+                if failure_owner.strong_count() > 0
+                    && failure_alive.load(std::sync::atomic::Ordering::Acquire)
+                {
+                    fail(error);
+                }
+            })
+            .send();
+        self.pending.lock().unwrap().insert(id, report);
+    }
+}
+
+pub struct Location {
+    pub username: String,
+    pub channel_id: u64,
+    pub access_hash: u64,
+    pub post_id: i32,
+}
+pub fn resolve_channel(
+    mtp: Arc<WeakInstance>,
+    username: String,
+    done: impl FnOnce(tg_scheme::InputChannel) + Send + 'static,
+    fail: impl Fn() + Send + Sync + 'static,
+) {
+    type Cache = std::collections::BTreeMap<String, (std::sync::Weak<()>, tg_scheme::InputChannel)>;
+    static CACHE: std::sync::OnceLock<Mutex<Cache>> = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(Cache::new()));
+    if !mtp.valid() {
+        fail();
+        return;
+    }
+    let hit = {
+        let mut cache = cache.lock().unwrap();
+        match cache.get(&username) {
+            Some((owner, value)) if owner.ptr_eq(&mtp.owner) => Some(value.clone()),
+            _ => {
+                cache.remove(&username);
+                None
+            }
+        }
+    };
+    if let Some(value) = hit {
+        done(value);
+        return;
+    }
+    let fail = Arc::new(fail);
+    let failed = fail.clone();
+    let owner = mtp.owner.clone();
+    let cache_name = username.clone();
+    mtp.send(
+        tg_scheme::ContactsResolveUsername::new(
+            tg_tl::Flags::default(),
+            username.into_bytes(),
+            None,
+        ),
+        move |result| {
+            if let Some(channel) = extract_channel(&result) {
+                cache
+                    .lock()
+                    .unwrap()
+                    .insert(cache_name, (owner, channel.clone()));
+                done(channel);
+            } else {
+                fail();
+            }
+        },
+        move |_| failed(),
+        0,
+    );
+}
+pub fn start_dedicated_loader(
+    mtp: Arc<WeakInstance>,
+    location: Location,
+    ready: impl FnOnce(Option<FileDescription>) + Send + 'static,
+) {
+    let ready = Arc::new(Mutex::new(Some(ready)));
+    let output = ready.clone();
+    let send_mtp = mtp.clone();
+    let request = move |channel| {
+        let output = output.clone();
+        let fail = output.clone();
+        send_mtp.send(
+            tg_scheme::ChannelsGetMessages::new(
+                channel,
+                vec![tg_scheme::mtp_input_message_id(location.post_id)],
+            ),
+            move |result| {
+                if let Some(done) = output.lock().unwrap().take() {
+                    done(parse_file(&result, location.post_id));
+                }
+            },
+            move |_| {
+                if let Some(done) = fail.lock().unwrap().take() {
+                    done(None);
+                }
+            },
+            0,
+        );
+    };
+    if location.channel_id != 0 {
+        request(tg_scheme::mtp_input_channel(
+            location.channel_id,
+            location.access_hash,
+        ));
+    } else {
+        resolve_channel(mtp, location.username, request, move || {
+            if let Some(done) = ready.lock().unwrap().take() {
+                done(None);
+            }
+        });
     }
 }

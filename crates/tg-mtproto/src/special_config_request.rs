@@ -45,8 +45,8 @@ pub fn concatenate_dns_txt_fields(entries: &[String]) -> Vec<u8> {
     entries
         .into_iter()
         .flat_map(|(_, s)| {
-            s.chars()
-                .map(|c| if u32::from(c) <= 255 { c as u8 } else { b'?' })
+            s.encode_utf16()
+                .map(|c| if c <= 255 { c as u8 } else { b'?' })
         })
         .collect()
 }
@@ -185,8 +185,8 @@ fn parse_json_field(bytes: &[u8], path: &[&str]) -> Vec<u8> {
     current
         .as_str()
         .unwrap_or("")
-        .chars()
-        .map(|c| if c as u32 <= 255 { c as u8 } else { b'?' })
+        .encode_utf16()
+        .map(|c| if c <= 255 { c as u8 } else { b'?' })
         .collect()
 }
 pub fn parse_realtime_response(bytes: &[u8]) -> Vec<u8> {
@@ -329,5 +329,238 @@ impl SpecialConfigRequest {
             self.timer.call_once(800);
         }
         result
+    }
+}
+
+pub fn parse_http_date(text: &str) -> Option<i64> {
+    let m = tg_base::qthelp_regex::regex_match(
+        r"\w\w\w, (\d\d) (\w\w\w) (\d\d\d\d) (\d\d):(\d\d):(\d\d) GMT",
+        text,
+        tg_base::qthelp_regex::RegExOptions::default(),
+    );
+    if !m.has_match() {
+        return None;
+    }
+    let number = |i| m.captured(i).parse::<i64>().ok();
+    let (day, year, hour, minute, second) =
+        (number(1)?, number(3)?, number(4)?, number(5)?, number(6)?);
+    let month = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+    .iter()
+    .position(|month| *month == m.captured(2))? as i64
+        + 1;
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let max_day = match month {
+        2 => {
+            if leap {
+                29
+            } else {
+                28
+            }
+        }
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    if year == 0 || day < 1 || day > max_day || hour > 23 || minute > 59 || second > 59 {
+        return None;
+    }
+    let y = year - i64::from(month <= 2);
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = month + if month > 2 { -3 } else { 9 };
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let days = era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719468;
+    Some(days * 86400 + hour * 3600 + minute * 60 + second)
+}
+pub struct WebReply {
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+    pub error: bool,
+}
+pub fn handle_header_unixtime(reply: &WebReply) -> Option<i64> {
+    if reply.error {
+        return None;
+    }
+    let date = reply
+        .headers
+        .iter()
+        .find(|(name, _)| name == "Date")?
+        .1
+        .as_str();
+    let time = parse_http_date(date)?;
+    tg_base::unixtime::http_update(time as i32);
+    Some(time)
+}
+pub fn request_finished(service: Service, reply: WebReply) -> Vec<u8> {
+    handle_header_unixtime(&reply);
+    parse_service_response(service, &reply.body)
+}
+#[allow(async_fn_in_trait)]
+pub trait WebExecutor {
+    async fn perform_request(
+        &self,
+        request: WebRequest,
+    ) -> Result<WebReply, crate::connection_abstract::TransportError>;
+}
+/// Shared HTTPS executor for DoH and the approved fallback-config services.
+pub struct ReqwestExecutor {
+    client: reqwest::Client,
+}
+impl Default for ReqwestExecutor {
+    fn default() -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .no_proxy()
+                .build()
+                .expect("TLS client"),
+        }
+    }
+}
+impl WebExecutor for ReqwestExecutor {
+    async fn perform_request(
+        &self,
+        request: WebRequest,
+    ) -> Result<WebReply, crate::connection_abstract::TransportError> {
+        let url = reqwest::Url::parse(&request.url).map_err(|_| {
+            crate::connection_abstract::TransportError::Protocol("bad special config URL")
+        })?;
+        if url.scheme() != "https" {
+            return Err(crate::connection_abstract::TransportError::Protocol(
+                "special config requires HTTPS",
+            ));
+        }
+        let mut get = if request.payload.is_empty() {
+            self.client.get(url)
+        } else {
+            self.client.post(url).body(request.payload)
+        };
+        for (name, value) in request.headers {
+            get = get.header(name, value);
+        }
+        let result = get.send().await?;
+        let headers = result
+            .headers()
+            .iter()
+            .filter_map(|(name, value)| {
+                value.to_str().ok().map(|value| {
+                    (
+                        if name.as_str() == "date" {
+                            "Date".into()
+                        } else {
+                            name.as_str().into()
+                        },
+                        value.to_string(),
+                    )
+                })
+            })
+            .collect();
+        let error = !result.status().is_success();
+        Ok(WebReply {
+            headers,
+            body: result.bytes().await?.to_vec(),
+            error,
+        })
+    }
+}
+
+pub fn instance_id(random: &mut impl crate::core_types::Random) -> &'static str {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(|| generate_instance_id(random))
+}
+type Completed = (
+    Service,
+    Result<WebReply, crate::connection_abstract::TransportError>,
+);
+pub struct SpecialConfigRunner<E: WebExecutor + 'static> {
+    request: SpecialConfigRequest,
+    executor: std::rc::Rc<E>,
+    domain: String,
+    phone: String,
+    time_only: bool,
+    key: RsaPublicKey,
+    tx: tokio::sync::mpsc::UnboundedSender<Completed>,
+    rx: tokio::sync::mpsc::UnboundedReceiver<Completed>,
+    tasks: Vec<tokio::task::JoinHandle<()>>,
+    time_done: bool,
+}
+impl<E: WebExecutor + 'static> SpecialConfigRunner<E> {
+    pub fn new(
+        test: bool,
+        time_only: bool,
+        domain: String,
+        phone: String,
+        host: &std::rc::Rc<tg_base::timer::TimerHost>,
+        executor: std::rc::Rc<E>,
+        random: &mut impl crate::core_types::Random,
+    ) -> Self {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        Self {
+            request: SpecialConfigRequest::new(test, time_only, host, random),
+            executor,
+            domain,
+            phone,
+            time_only,
+            key: RsaPublicKey::from_pem(PUBLIC_KEY).expect("built-in simple-config RSA"),
+            tx,
+            rx,
+            tasks: vec![],
+            time_done: false,
+        }
+    }
+    pub fn with_key(mut self, key: RsaPublicKey) -> Self {
+        self.key = key;
+        self
+    }
+    pub fn set_phone(&mut self, phone: String) {
+        self.phone = phone;
+    }
+    pub fn time_done(&self) -> bool {
+        self.time_done
+    }
+    pub fn process(
+        &mut self,
+        now: i64,
+        random: &mut impl crate::core_types::Random,
+    ) -> Vec<Option<Endpoint>> {
+        while let Some(attempt) = self.request.send_next_request() {
+            let request = request_for_attempt(&attempt, &self.domain, instance_id(random), random);
+            let executor = self.executor.clone();
+            let tx = self.tx.clone();
+            self.tasks.push(tokio::task::spawn_local(async move {
+                let result = executor.perform_request(request).await;
+                let _ = tx.send((attempt.service, result));
+                tg_runtime::on_main(|| {});
+            }));
+        }
+        let mut endpoints = vec![];
+        while let Ok((service, result)) = self.rx.try_recv() {
+            let Ok(reply) = result else {
+                continue;
+            };
+            if handle_header_unixtime(&reply).is_some() {
+                self.time_done = true;
+            }
+            if self.time_only {
+                continue;
+            }
+            let bytes = parse_service_response(service, &reply.body);
+            let Ok(config) = decrypt_simple_config(&bytes, &self.key) else {
+                continue;
+            };
+            let Ok(found) = handle_response(&config, &self.phone, now) else {
+                continue;
+            };
+            endpoints.extend(found.into_iter().map(Some));
+            endpoints.push(None);
+        }
+        endpoints
+    }
+}
+impl<E: WebExecutor + 'static> Drop for SpecialConfigRunner<E> {
+    fn drop(&mut self) {
+        for task in self.tasks.drain(..) {
+            task.abort();
+        }
     }
 }

@@ -1,16 +1,12 @@
-//! Only test DCs; the only application RPCs are help.getConfig/help.getNearestDc.
-use std::{
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
-use tg_base::timer::{SystemClock, ThreadAlarm, TimerHost};
+//! No login: only help.getConfig and help.getNearestDc, on test DCs.
+use std::sync::{Arc, Mutex};
 use tg_mtproto::{
-    connection_abstract::RuntimeClock,
-    core_types::SystemRandom,
-    mtp_instance::{network::NetworkTransport, Fields, Instance, Mode},
+    mtp_instance::{
+        runtime::{RuntimeInstance, TransportPolicy},
+        Fields, Mode,
+    },
     mtproto_dc_options::Environment,
     sender::Sender,
-    session::{Session, SessionParameters},
     session_private::ClientInfo,
 };
 #[tokio::main(flavor = "current_thread")]
@@ -28,8 +24,20 @@ async fn run(http: bool) {
     let mut fields = Fields::new(Environment::Test);
     fields.device_model = "Desktop".into();
     fields.system_version = "Linux".into();
-    let instance = Instance::new(Mode::Normal, fields);
-    instance.start();
+    let mut runtime = RuntimeInstance::new(
+        Mode::Normal,
+        fields,
+        ClientInfo {
+            api_id: 17349,
+            ..Default::default()
+        },
+        if http {
+            TransportPolicy::HttpOnly
+        } else {
+            TransportPolicy::TcpOnly
+        },
+    );
+    let instance = runtime.instance().clone();
     let sender = Sender::new(instance.clone());
     let results = Arc::new(Mutex::new(Vec::new()));
     let output = results.clone();
@@ -46,38 +54,9 @@ async fn run(http: bool) {
     let started = std::time::Instant::now();
     let mut nearest = false;
     let mut printed = 0;
-    let mut tasks = Vec::new();
     loop {
-        for spawn in instance.take_session_spawns() {
-            let clock = Arc::new(SystemClock);
-            let host = TimerHost::new(clock.clone());
-            let (mut session, handle) = Session::new(
-                spawn.id,
-                spawn.dc,
-                Arc::new(instance.clone()),
-                instance.store.clone(),
-                SessionParameters {
-                    clock: RuntimeClock,
-                    random: SystemRandom,
-                    host: host.clone(),
-                    info: ClientInfo::default(),
-                },
-            );
-            let mut options = session.data.options();
-            options.use_ipv6 = false;
-            options.use_http = http;
-            options.use_tcp = !http;
-            session.data.set_options(options);
-            session.re_init_connection();
-            let wake = handle.clone();
-            host.set_alarm(Some(Rc::new(ThreadAlarm::new(clock, move || wake.wake()))));
-            instance.attach_session(spawn.id, handle);
-            tasks.push(tokio::task::spawn_local(
-                session.run(NetworkTransport::default()),
-            ));
-        }
         tg_runtime::process_main_queue();
-        instance.process(tg_runtime::now());
+        runtime.process();
         let len = results.lock().unwrap().len();
         if len > printed {
             for value in &results.lock().unwrap()[printed..] {
@@ -105,18 +84,13 @@ async fn run(http: bool) {
         if len == 2 {
             break;
         }
-        if started.elapsed().as_secs() > 60 {
-            eprintln!(
-                "{} TIMEOUT state={} transport={}",
-                if http { "HTTP" } else { "TCP" },
-                instance.dcstate(0),
-                instance.dctransport(0)
-            );
-            break;
-        }
+        assert!(
+            started.elapsed().as_secs() <= 60,
+            "{} TIMEOUT state={} transport={}",
+            if http { "HTTP" } else { "TCP" },
+            instance.dcstate(0),
+            instance.dctransport(0)
+        );
         tokio::task::yield_now().await;
-    }
-    for task in tasks {
-        task.abort();
     }
 }

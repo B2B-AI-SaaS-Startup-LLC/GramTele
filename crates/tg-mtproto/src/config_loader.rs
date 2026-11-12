@@ -12,7 +12,11 @@ use std::{
 };
 use tg_base::timer::{Timer, TimerHost};
 use tg_tl::Deserialize;
+type ConfigResult = Result<(bool, tg_scheme::Config), Error>;
+type ConfigResults = Arc<Mutex<VecDeque<ConfigResult>>>;
 pub struct ConfigLoader {
+    pub special_generation: u64,
+    pub special_active: bool,
     instance: Instance,
     current: i32,
     request: i32,
@@ -26,7 +30,7 @@ pub struct ConfigLoader {
     special_due: Rc<Cell<bool>>,
     enumerate_timer: Timer,
     special_timer: Timer,
-    results: Arc<Mutex<VecDeque<Result<(bool, tg_scheme::Config), Error>>>>,
+    results: ConfigResults,
 }
 impl ConfigLoader {
     pub fn new(instance: Instance, phone: String, proxy: bool, host: &Rc<TimerHost>) -> Self {
@@ -35,6 +39,8 @@ impl ConfigLoader {
         let e = enumerate_due.clone();
         let s = special_due.clone();
         Self {
+            special_generation: 0,
+            special_active: false,
             instance,
             current: 0,
             request: 0,
@@ -121,11 +127,14 @@ impl ConfigLoader {
         self.current = ids[index];
         self.request = self.send_request(crate::facade::config_dc_id(self.current), false);
         self.enumerate_timer.call_once(8000);
+        self.refresh_special_loader();
     }
     pub fn set_phone(&mut self, phone: String) {
         if self.phone != phone {
             self.phone = phone;
-            self.tried.clear();
+            if self.special_active {
+                self.create_special_loader();
+            }
         }
     }
     pub fn set_proxy_enabled(&mut self, proxy: bool) {
@@ -148,7 +157,12 @@ impl ConfigLoader {
     }
     pub fn send_special_request(&mut self, random: &mut impl crate::core_types::Random) {
         self.terminate_special_request();
-        if self.proxy || self.endpoints.is_empty() {
+        if self.proxy {
+            self.special_active = false;
+            return;
+        }
+        if self.endpoints.is_empty() {
+            self.refresh_special_loader();
             return;
         }
         let index = random.u32() as usize % self.endpoints.len();
@@ -177,5 +191,25 @@ impl Drop for ConfigLoader {
     fn drop(&mut self) {
         self.terminate_request();
         self.terminate_special_request();
+    }
+}
+
+impl ConfigLoader {
+    pub fn refresh_special_loader(&mut self) {
+        if self.proxy || crate::session::SessionEnvironment::is_keys_destroyer(&self.instance) {
+            self.special_active = false;
+            return;
+        }
+        if !self.special_active || (self.special_request == 0 && self.endpoints.is_empty()) {
+            self.create_special_loader();
+        }
+    }
+    pub fn create_special_loader(&mut self) {
+        self.tried.clear();
+        self.special_active = true;
+        self.special_generation += 1;
+    }
+    pub fn special_config_loaded(&self, result: &tg_scheme::Config) {
+        self.instance.apply_config(result, true);
     }
 }

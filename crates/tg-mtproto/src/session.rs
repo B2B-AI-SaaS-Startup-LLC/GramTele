@@ -349,6 +349,7 @@ pub enum SessionCommand {
         request_id: i32,
         msg_id: u64,
     },
+    SendAnything(i64),
     Restart,
     Stop,
     Kill,
@@ -749,7 +750,7 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
         if self.killed {
             return;
         }
-        if self.paused {
+        if self.paused || crate::facade::paused() {
             self.need_receive = true;
             return;
         }
@@ -852,6 +853,7 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
             match command {
                 SessionCommand::Send { handle, can_wait } => self.send_prepared(handle, can_wait),
                 SessionCommand::Cancel { request_id, msg_id } => self.cancel(request_id, msg_id),
+                SessionCommand::SendAnything(wait) => self.send_anything(wait),
                 SessionCommand::Restart => self.restart(),
                 SessionCommand::Stop => self.stop(),
                 SessionCommand::Kill => self.kill(),
@@ -912,6 +914,7 @@ impl<C: SessionClock + 'static, R: Random + 'static> Session<C, R> {
         match command {
             SessionCommand::Send { handle, can_wait } => self.send_prepared(handle, can_wait),
             SessionCommand::Cancel { request_id, msg_id } => self.cancel(request_id, msg_id),
+            SessionCommand::SendAnything(wait) => self.send_anything(wait),
             SessionCommand::Restart => self.restart(),
             SessionCommand::Stop => self.stop(),
             SessionCommand::Kill => self.kill(),

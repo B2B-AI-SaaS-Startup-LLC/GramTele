@@ -44,7 +44,7 @@
 | sqlite_orm | `rusqlite` |
 | nlohmann/json | `serde` |
 
-Исключение: HTTP-транспорт MTProto реализуется вручную поверх tokio AsyncRead/AsyncWrite из-за строки статуса Telegram с несколькими пробелами; reqwest в MTProto остаётся только для DNS-over-HTTPS.
+Исключение: HTTP-транспорт MTProto реализуется вручную поверх tokio AsyncRead/AsyncWrite из-за строки статуса Telegram с несколькими пробелами; reqwest в MTProto используется для DNS-over-HTTPS и HTTPS резервных конфигураций (special_config_request; разрешено пользователем).
 
 Модель владения: граф объектов оригинала (`Data::Session` владеет всем, остальные держат сырые указатели) переводится в хранилища с типизированными идентификаторами; интерфейс и ядро живут в главном потоке, как в оригинале.
 

@@ -1,5 +1,6 @@
 //! Request ownership, DC routing and main-thread callback dispatch.
 pub mod network;
+pub mod runtime;
 use crate::{
     core_types::*,
     details::{
@@ -77,26 +78,39 @@ struct State {
     spawns: VecDeque<SpawnSession>,
     keys: BTreeMap<i32, Arc<AuthKey>>,
     requests: BTreeMap<i32, RequestHandle>,
+    retired: BTreeSet<RequestHandle>,
     routes: BTreeMap<i32, i32>,
+    pending_waits: BTreeMap<i32, i64>,
     callbacks: BTreeMap<i32, ResponseHandler>,
-    events: VecDeque<InstanceEvent>,
-    changes: Vec<mpsc::UnboundedSender<EnvironmentChange>>,
+    events: Arc<Mutex<VecDeque<InstanceEvent>>>,
     delayed: VecDeque<(i32, i64)>,
     delays: BTreeMap<i32, i32>,
     dependent: BTreeMap<i32, i32>,
     bad_guest: BTreeSet<i32>,
     waiters: BTreeMap<i32, Vec<i32>>,
     exports: BTreeMap<i32, i32>,
+    handler_epochs: [u64; 4],
+    resume: mpsc::UnboundedReceiver<()>,
     updates: Option<UpdateHandler>,
     global_fail: Option<GlobalFailHandler>,
     state_changed: Option<StateHandler>,
     reset: Option<ResetHandler>,
     pub_events: VecDeque<Notice>,
+    notice_subscribers: Vec<mpsc::UnboundedSender<Notice>>,
     now: i64,
+    last_config: i64,
+    config_expires: i64,
+    config_loading: bool,
+    phone: String,
+    resolver: crate::details::mtproto_domain_resolver::DomainResolver,
+    resolve_work: VecDeque<crate::details::mtproto_domain_resolver::Request>,
+    cdn_request: i32,
+    http_time_loading: bool,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Notice {
     WriteKeys,
+    TemporaryKeyChanged(i32),
     AllKeysDestroyed,
     MainDc(i32),
     Restarted(i32),
@@ -105,16 +119,24 @@ pub enum Notice {
     LanguageReset,
     BadConfiguration,
     ConfigNeeded,
+    ConfigApplied {
+        suggested_lang: String,
+        lang_version: i32,
+        base_lang_version: i32,
+        autoupdate_prefix: Option<String>,
+    },
     CdnConfigNeeded,
     HttpTimeNeeded,
 }
 #[derive(Clone)]
 pub struct Instance {
+    environment: Arc<EnvironmentBridge>,
     state: Arc<Mutex<State>>,
     pub store: Arc<Mutex<RequestStore>>,
 }
 impl Instance {
     pub fn new(mode: Mode, fields: Fields) -> Self {
+        let environment = Arc::new(EnvironmentBridge::new(&fields, mode));
         let mut keys = BTreeMap::new();
         let mut dcs = BTreeMap::new();
         for key in fields.keys {
@@ -136,7 +158,8 @@ impl Instance {
         } else {
             fields.main_dc_id
         };
-        Self {
+        let result = Self {
+            environment: environment.clone(),
             store: Arc::new(Mutex::new(RequestStore::default())),
             state: Arc::new(Mutex::new(State {
                 config: fields.config,
@@ -152,24 +175,39 @@ impl Instance {
                 spawns: VecDeque::new(),
                 keys,
                 requests: BTreeMap::new(),
+                retired: BTreeSet::new(),
                 routes: BTreeMap::new(),
+                pending_waits: BTreeMap::new(),
                 callbacks: BTreeMap::new(),
-                events: VecDeque::new(),
-                changes: vec![],
+                events: Arc::new(Mutex::new(VecDeque::new())),
                 delayed: VecDeque::new(),
                 delays: BTreeMap::new(),
                 dependent: BTreeMap::new(),
                 bad_guest: BTreeSet::new(),
                 waiters: BTreeMap::new(),
                 exports: BTreeMap::new(),
+                handler_epochs: [0; 4],
+                resume: crate::facade::unpaused(),
                 updates: None,
                 global_fail: None,
                 state_changed: None,
                 reset: None,
                 pub_events: VecDeque::new(),
+                notice_subscribers: vec![],
                 now: 0,
+                last_config: 0,
+                config_expires: 0,
+                config_loading: false,
+                phone: String::new(),
+                resolver: Default::default(),
+                resolve_work: VecDeque::new(),
+                cdn_request: 0,
+                http_time_loading: false,
             })),
-        }
+        };
+        result.state.lock().unwrap().events = environment.events.clone();
+        result.sync_environment();
+        result
     }
     pub fn start(&self) {
         let ids = {
@@ -182,6 +220,9 @@ impl Instance {
         };
         for id in ids {
             self.ensure_session(id);
+            if self.is_keys_destroyer() {
+                self.schedule_key_destroy(id);
+            }
         }
         self.request_config();
     }
@@ -203,8 +244,8 @@ impl Instance {
         }
         let mut s = self.state.lock().unwrap();
         s.forced = true;
-        s.pub_events.push_back(Notice::MainDc(id));
-        s.pub_events.push_back(Notice::WriteKeys);
+        s.notice(Notice::MainDc(id));
+        s.notice(Notice::WriteKeys);
     }
     pub fn resolved_dc_id(&self, id: i32) -> i32 {
         let main = self.main_dc_id();
@@ -247,11 +288,19 @@ impl Instance {
             s.routes
                 .iter()
                 .filter(|(_, dc)| dc.abs() == id)
-                .filter_map(|(rid, _)| s.requests.get(rid).copied())
+                .filter(|(rid, _)| !s.dependent.contains_key(rid))
+                .filter_map(|(rid, _)| {
+                    s.requests.get(rid).copied().map(|h| {
+                        (
+                            h,
+                            (s.pending_waits.get(rid).copied().unwrap_or(s.now) - s.now).max(0),
+                        )
+                    })
+                })
                 .collect()
         };
-        for handle in pending {
-            self.send_handle(id, handle, 0);
+        for (handle, wait) in pending {
+            self.send_handle(id, handle, wait);
         }
     }
     pub fn session(&self, id: i32) -> Option<SessionHandle> {
@@ -322,12 +371,15 @@ impl Instance {
             }
             let handle = self.store.lock().unwrap().insert(request);
             s.requests.insert(id, handle);
+            let send_at = s.now + wait;
+            s.pending_waits.insert(id, send_at);
             s.routes.insert(id, if dc == 0 { -target } else { target });
             if callbacks.done.is_some() || callbacks.fail.is_some() {
                 s.callbacks.insert(id, callbacks);
             }
             (handle, blocked)
         };
+        self.sync_environment();
         if !blocked {
             self.send_handle(target, handle, wait);
         }
@@ -359,6 +411,7 @@ impl Instance {
         let (removed, resend) = {
             let mut s = self.state.lock().unwrap();
             s.delays.remove(&id);
+            s.pending_waits.remove(&id);
             s.routes.remove(&id);
             let removed = s.requests.remove(&id);
             let mut affected = BTreeSet::from([id]);
@@ -378,8 +431,10 @@ impl Instance {
             (removed, resend)
         };
         if let Some(h) = removed {
-            self.store.lock().unwrap().remove(h);
+            self.state.lock().unwrap().retired.insert(h);
         }
+        self.collect_requests();
+        self.sync_environment();
         for rid in resend {
             self.resend(rid);
         }
@@ -470,19 +525,28 @@ impl Instance {
         std::mem::take(&mut self.state.lock().unwrap().pub_events)
     }
     pub fn request_config(&self) {
-        if !self.is_keys_destroyer() {
-            self.state
-                .lock()
-                .unwrap()
-                .pub_events
-                .push_back(Notice::ConfigNeeded);
+        let mut s = self.state.lock().unwrap();
+        if s.mode != Mode::KeysDestroyer && !s.config_loading {
+            s.config_loading = true;
+            s.notice(Notice::ConfigNeeded);
         }
     }
     pub fn process(&self, now: i64) {
         assert!(tg_runtime::main_queue().is_main_thread());
         self.state.lock().unwrap().now = now;
+        let resume = {
+            let mut s = self.state.lock().unwrap();
+            let mut changed = false;
+            while s.resume.try_recv().is_ok() {
+                changed = true;
+            }
+            changed
+        };
+        if resume {
+            self.unpaused();
+        }
         loop {
-            let event = self.state.lock().unwrap().events.pop_front();
+            let event = self.environment.events.lock().unwrap().pop_front();
             let Some(event) = event else {
                 break;
             };
@@ -509,73 +573,94 @@ impl Instance {
         self.state.lock().unwrap().delayed.front().map(|x| x.1)
     }
     pub fn set_updates_handler(&self, h: Option<UpdateHandler>) {
-        self.state.lock().unwrap().updates = h;
+        let mut s = self.state.lock().unwrap();
+        s.handler_epochs[0] += 1;
+        s.updates = h;
     }
     pub fn set_global_fail_handler(&self, h: Option<GlobalFailHandler>) {
-        self.state.lock().unwrap().global_fail = h;
+        let mut s = self.state.lock().unwrap();
+        s.handler_epochs[1] += 1;
+        s.global_fail = h;
     }
     pub fn set_state_changed_handler(&self, h: Option<StateHandler>) {
-        self.state.lock().unwrap().state_changed = h;
+        let mut s = self.state.lock().unwrap();
+        s.handler_epochs[2] += 1;
+        s.state_changed = h;
     }
     pub fn set_session_reset_handler(&self, h: Option<ResetHandler>) {
-        self.state.lock().unwrap().reset = h;
+        let mut s = self.state.lock().unwrap();
+        s.handler_epochs[3] += 1;
+        s.reset = h;
     }
     pub fn clear_global_handlers(&self) {
         let mut s = self.state.lock().unwrap();
+        for epoch in &mut s.handler_epochs {
+            *epoch += 1;
+        }
         s.updates = None;
         s.global_fail = None;
         s.state_changed = None;
         s.reset = None;
     }
     fn broadcast(&self, change: EnvironmentChange) {
-        self.state
+        self.environment
+            .changes
             .lock()
             .unwrap()
-            .changes
             .retain(|tx| tx.send(change.clone()).is_ok());
     }
     fn process_event(&self, event: InstanceEvent) {
         match event {
             InstanceEvent::Callback(r) => self.process_callback(&r),
             InstanceEvent::Update(r) => {
-                let mut h = self.state.lock().unwrap().updates.take();
+                let (mut h, epoch) = {
+                    let mut s = self.state.lock().unwrap();
+                    (s.updates.take(), s.handler_epochs[0])
+                };
                 if let Some(f) = &mut h {
                     f(&r);
                 }
-                self.state.lock().unwrap().updates = h;
+                let mut s = self.state.lock().unwrap();
+                if s.handler_epochs[0] == epoch {
+                    s.updates = h;
+                }
             }
             InstanceEvent::StateChange(dc, state) => {
-                let mut h = self.state.lock().unwrap().state_changed.take();
+                let (mut h, epoch) = {
+                    let mut s = self.state.lock().unwrap();
+                    (s.state_changed.take(), s.handler_epochs[2])
+                };
                 if let Some(f) = &mut h {
                     f(dc, state);
                 }
-                self.state.lock().unwrap().state_changed = h;
+                let mut s = self.state.lock().unwrap();
+                if s.handler_epochs[2] == epoch {
+                    s.state_changed = h;
+                }
             }
             InstanceEvent::SessionReset(dc) => {
-                let mut h = self.state.lock().unwrap().reset.take();
+                let (mut h, epoch) = {
+                    let mut s = self.state.lock().unwrap();
+                    (s.reset.take(), s.handler_epochs[3])
+                };
                 if let Some(f) = &mut h {
                     f(dc);
                 }
-                self.state.lock().unwrap().reset = h;
+                let mut s = self.state.lock().unwrap();
+                if s.handler_epochs[3] == epoch {
+                    s.reset = h;
+                }
             }
             InstanceEvent::DcPersistentKeyChanged(dc, key) => {
-                self.state.lock().unwrap().keys.insert(dc, key);
-                self.broadcast(EnvironmentChange::TemporaryKey(dc));
-                self.state
-                    .lock()
-                    .unwrap()
-                    .pub_events
-                    .push_back(Notice::WriteKeys);
+                self.dc_persistent_key_changed(dc, Some(key))
             }
-            InstanceEvent::DcTemporaryKeyChanged(dc) => {
-                self.broadcast(EnvironmentChange::TemporaryKey(dc))
-            }
+            InstanceEvent::DcTemporaryKeyChanged(dc) => self.dc_temporary_key_changed(dc),
             InstanceEvent::KeyWasPossiblyDestroyed(dc) => {
                 let mut s = self.state.lock().unwrap();
                 s.dcs.remove(&dc);
                 s.keys.remove(&dc);
                 if s.dcs.is_empty() {
-                    s.pub_events.push_back(Notice::AllKeysDestroyed);
+                    s.notice(Notice::AllKeysDestroyed);
                 }
                 drop(s);
                 self.schedule_session_destroy(dc);
@@ -584,41 +669,23 @@ impl Instance {
                 let center = self.state.lock().unwrap().dcs.get(&bare_dc_id(dc)).cloned();
                 if center.is_some_and(|d| d.destroy_confirmed_forgotten_key(key)) {
                     self.state.lock().unwrap().keys.remove(&bare_dc_id(dc));
-                    self.state
-                        .lock()
-                        .unwrap()
-                        .pub_events
-                        .push_back(Notice::WriteKeys);
+                    self.state.lock().unwrap().notice(Notice::WriteKeys);
                 }
                 self.restart(Some(dc));
             }
             InstanceEvent::RequestConfig | InstanceEvent::RequestConfigIfOld => {
                 self.request_config()
             }
-            InstanceEvent::RequestCdnConfig => self
-                .state
-                .lock()
-                .unwrap()
-                .pub_events
-                .push_back(Notice::CdnConfigNeeded),
-            InstanceEvent::SyncHttpUnixtime => self
-                .state
-                .lock()
-                .unwrap()
-                .pub_events
-                .push_back(Notice::HttpTimeNeeded),
-            InstanceEvent::RestartedByTimeout(dc) => self
-                .state
-                .lock()
-                .unwrap()
-                .pub_events
-                .push_back(Notice::Restarted(dc)),
-            InstanceEvent::BadConfigurationError => self
-                .state
-                .lock()
-                .unwrap()
-                .pub_events
-                .push_back(Notice::BadConfiguration),
+            InstanceEvent::RequestCdnConfig => {
+                self.request_cdn_config();
+            }
+            InstanceEvent::SyncHttpUnixtime => self.sync_http_unixtime(),
+            InstanceEvent::RestartedByTimeout(dc) => {
+                self.state.lock().unwrap().notice(Notice::Restarted(dc))
+            }
+            InstanceEvent::BadConfigurationError => {
+                self.state.lock().unwrap().notice(Notice::BadConfiguration)
+            }
         }
     }
     pub fn process_callback(&self, response: &Response) {
@@ -633,6 +700,7 @@ impl Instance {
             self.unregister_request(response.request_id);
             return;
         }
+        self.sync_environment();
         let error = if response.reply.is_empty() {
             Some(Error::local("RESPONSE_PARSE_FAILED", "Empty response."))
         } else if response.reply[0] as u32 == 0x2144ca19 {
@@ -655,6 +723,7 @@ impl Instance {
         } else {
             self.unregister_request(response.request_id);
         }
+        self.sync_environment();
     }
     pub fn rpc_error_occurred(
         &self,
@@ -695,12 +764,7 @@ impl Instance {
             "USER_MIGRATE_",
         ]
         .iter()
-        .find_map(|p| {
-            error
-                .kind
-                .strip_prefix(p)
-                .and_then(|x| x.parse::<i32>().ok())
-        });
+        .find_map(|p| numeric_suffix(&error.kind, p));
         if let Some(dc) = migration {
             if route == 0 || dc == 0 {
                 return false;
@@ -746,19 +810,9 @@ impl Instance {
             }
             return true;
         }
-        let flood = error
-            .kind
-            .strip_prefix("FLOOD_WAIT_")
-            .and_then(|x| x.parse::<i32>().ok());
-        let premium = error
-            .kind
-            .strip_prefix("FLOOD_PREMIUM_WAIT_")
-            .and_then(|x| x.parse::<i32>().ok());
-        let slow = error
-            .kind
-            .strip_prefix("SLOWMODE_WAIT_")
-            .and_then(|x| x.parse::<i32>().ok())
-            .filter(|n| *n < 3);
+        let flood = numeric_suffix(&error.kind, "FLOOD_WAIT_");
+        let premium = numeric_suffix(&error.kind, "FLOOD_PREMIUM_WAIT_");
+        let slow = numeric_suffix(&error.kind, "SLOWMODE_WAIT_").filter(|n| *n < 3);
         if error.code < 0
             || error.code >= 500
             || flood.is_some()
@@ -792,7 +846,7 @@ impl Instance {
                 s.delayed.insert(index, (id, at));
             }
             if premium.is_some() {
-                s.pub_events.push_back(Notice::NonPremiumDelayed(id));
+                s.notice(Notice::NonPremiumDelayed(id));
             }
             return true;
         }
@@ -808,18 +862,10 @@ impl Instance {
             }
         }
         if error.kind == "CONNECTION_LANG_CODE_INVALID" {
-            self.state
-                .lock()
-                .unwrap()
-                .pub_events
-                .push_back(Notice::LanguageReset);
+            self.state.lock().unwrap().notice(Notice::LanguageReset);
         }
         if error.kind == "FROZEN_METHOD_INVALID" {
-            self.state
-                .lock()
-                .unwrap()
-                .pub_events
-                .push_back(Notice::Frozen);
+            self.state.lock().unwrap().notice(Notice::Frozen);
         }
         let bad_guest = error.code == 400 && error.kind == "FILE_ID_INVALID";
         let first_bad = bad_guest && !self.state.lock().unwrap().bad_guest.contains(&id);
@@ -832,11 +878,17 @@ impl Instance {
             self.state.lock().unwrap().bad_guest.remove(&id);
         }
         if error.code == 401 && error.kind != "AUTH_KEY_PERM_EMPTY" {
-            let mut h = self.state.lock().unwrap().global_fail.take();
+            let (mut h, epoch) = {
+                let mut s = self.state.lock().unwrap();
+                (s.global_fail.take(), s.handler_epochs[1])
+            };
             if let Some(f) = &mut h {
                 f(error, response);
             }
-            self.state.lock().unwrap().global_fail = h;
+            let mut s = self.state.lock().unwrap();
+            if s.handler_epochs[1] == epoch {
+                s.global_fail = h;
+            }
         }
         false
     }
@@ -874,11 +926,11 @@ impl SessionEnvironment for Instance {
     }
     fn subscribe(&self) -> mpsc::UnboundedReceiver<EnvironmentChange> {
         let (tx, rx) = mpsc::unbounded_channel();
-        self.state.lock().unwrap().changes.push(tx);
+        self.environment.changes.lock().unwrap().push(tx);
         rx
     }
     fn emit(&self, event: InstanceEvent) {
-        self.state.lock().unwrap().events.push_back(event);
+        self.environment.events.lock().unwrap().push_back(event);
     }
 }
 
@@ -897,8 +949,8 @@ impl Instance {
             return;
         };
         let data = result.c_auth_exported_authorization();
-        let owner = self.clone();
-        let fail = self.clone();
+        let owner = self.downgrade();
+        let fail = self.downgrade();
         self.send(
             &tg_scheme::AuthImportAuthorization::new(data.id, data.bytes.clone()),
             ResponseHandler {
@@ -984,8 +1036,8 @@ impl Instance {
             .or_default()
             .is_empty();
         if first {
-            let owner = self.clone();
-            let fail = self.clone();
+            let owner = self.downgrade();
+            let fail = self.downgrade();
             let export = self.send(
                 &tg_scheme::AuthExportAuthorization::new(target),
                 ResponseHandler {
@@ -1044,8 +1096,8 @@ impl Instance {
         if self.dc_options().dc_type(id) == crate::mtproto_dc_options::DcType::Cdn {
             self.perform_key_destroy(id);
         } else {
-            let owner = self.clone();
-            let fail = self.clone();
+            let owner = self.downgrade();
+            let fail = self.downgrade();
             self.send(
                 &tg_scheme::AuthLogOut::new(),
                 ResponseHandler {
@@ -1070,8 +1122,8 @@ impl Instance {
         }
     }
     pub fn perform_key_destroy(&self, id: i32) {
-        let owner = self.clone();
-        let fail = self.clone();
+        let owner = self.downgrade();
+        let fail = self.downgrade();
         self.send(
             &tg_scheme::DestroyAuthKey::new(),
             ResponseHandler {
@@ -1131,6 +1183,7 @@ impl Instance {
                 secret: endpoint.secret.clone(),
             });
         drop(s);
+        self.sync_environment();
         self.broadcast(EnvironmentChange::DcOptions(id));
     }
     pub fn apply_config(&self, result: &tg_scheme::Config, special: bool) {
@@ -1142,9 +1195,25 @@ impl Instance {
             }
         } else {
             s.config.apply(data);
+            s.last_config = s.now;
+            s.config_expires =
+                s.now + (i64::from(data.expires) - i64::from(tg_base::unixtime::now())) * 1000;
+            s.config_loading = false;
+            s.notice(Notice::ConfigApplied {
+                suggested_lang: String::from_utf8_lossy(
+                    data.vsuggested_lang_code().map_or(&[], |v| v.as_slice()),
+                )
+                .into_owned(),
+                lang_version: data.vlang_pack_version().unwrap_or(0),
+                base_lang_version: data.vbase_lang_pack_version().unwrap_or(0),
+                autoupdate_prefix: data
+                    .vautoupdate_url_prefix()
+                    .map(|p| String::from_utf8_lossy(p).into_owned()),
+            });
         }
         let ids = s.sessions.keys().copied().collect::<Vec<_>>();
         drop(s);
+        self.sync_environment();
         for id in ids {
             self.broadcast(EnvironmentChange::DcOptions(bare_dc_id(id)));
         }
@@ -1185,5 +1254,636 @@ impl InstanceTimers {
         } else {
             self.timer.cancel();
         }
+    }
+}
+
+impl Instance {
+    pub fn get_dc_by_id(&self, id: i32) -> Arc<Dcenter> {
+        self.ensure_session(id);
+        let s = self.state.lock().unwrap();
+        if let Some(dc) = s.dcs.get(&id) {
+            return dc.clone();
+        }
+        let real = crate::facade::get_real_id_from_temporary_dc_id(id);
+        s.dcs[&if real != 0 { real } else { bare_dc_id(id) }].clone()
+    }
+    pub fn set_device_model(&self, device: String) {
+        self.state.lock().unwrap().device = device;
+        self.sync_environment();
+        self.re_init_connection(self.main_dc_id());
+    }
+    pub fn set_languages(&self, system: String, cloud: String, pack: String) {
+        self.state.lock().unwrap().languages = [system, cloud, pack];
+        self.sync_environment();
+        self.re_init_connection(self.main_dc_id());
+    }
+    pub fn set_proxy_settings(&self, proxy: ProxySettings) {
+        self.state.lock().unwrap().proxy = proxy;
+        self.sync_environment();
+        self.restart(None);
+    }
+    pub fn apply_domain_ips(&self, host: &str, ips: &[String], expires: i64) {
+        let mut s = self.state.lock().unwrap();
+        let proxy = &mut s.proxy.selected;
+        if proxy.host != host || !proxy.try_custom_resolve() {
+            return;
+        }
+        proxy.resolved_expire_at = expires;
+        let mut copy = ips.to_vec();
+        proxy.resolved_ips.retain(|ip| {
+            if let Some(index) = copy.iter().position(|x| x == ip) {
+                copy.remove(index);
+                true
+            } else {
+                false
+            }
+        });
+        proxy.resolved_ips.extend(copy);
+        let handles = s.sessions.values().cloned().collect::<Vec<_>>();
+        drop(s);
+        self.sync_environment();
+        for h in handles {
+            h.data().refresh_options();
+        }
+    }
+    pub fn set_good_proxy_domain(&self, host: &str, ip: &str) {
+        let mut s = self.state.lock().unwrap();
+        let proxy = &mut s.proxy.selected;
+        if proxy.host != host || !proxy.try_custom_resolve() {
+            return;
+        }
+        if let Some(index) = proxy.resolved_ips.iter().position(|x| x == ip) {
+            proxy.resolved_ips[..=index].rotate_right(1);
+        }
+        drop(s);
+        self.sync_environment();
+    }
+    pub fn send_anything(&self, dc: i32, wait: i64) {
+        self.ensure_session(dc);
+        if let Some(session) = self.session(dc) {
+            session.send(SessionCommand::SendAnything(wait));
+        }
+    }
+    pub fn unpaused(&self) {
+        let sessions = self
+            .state
+            .lock()
+            .unwrap()
+            .sessions
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        for session in sessions {
+            session.send(SessionCommand::Unpaused);
+        }
+    }
+    pub fn logout(&self, done: impl Fn() + Send + Sync + 'static) {
+        let done = Arc::new(done);
+        let fail = done.clone();
+        self.send(
+            &tg_scheme::AuthLogOut::new(),
+            ResponseHandler {
+                done: Some(Box::new(move |_| {
+                    done();
+                    true
+                })),
+                fail: Some(Box::new(move |_, _| {
+                    fail();
+                    true
+                })),
+            },
+            0,
+            0,
+            0,
+            0,
+        );
+        let ids = self
+            .state
+            .lock()
+            .unwrap()
+            .keys
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        for dc in ids {
+            if dc == self.main_dc_id()
+                || self.dc_options().dc_type(dc) == crate::mtproto_dc_options::DcType::Cdn
+            {
+                continue;
+            }
+            let target = crate::facade::logout_dc_id(dc);
+            let owner = self.downgrade();
+            let fail = self.downgrade();
+            self.send(
+                &tg_scheme::AuthLogOut::new(),
+                ResponseHandler {
+                    done: Some(Box::new(move |_| {
+                        owner.kill_session(target);
+                        true
+                    })),
+                    fail: Some(Box::new(move |_, _| {
+                        fail.kill_session(target);
+                        true
+                    })),
+                },
+                target,
+                0,
+                0,
+                0,
+            );
+        }
+    }
+}
+
+impl Instance {
+    fn collect_requests(&self) {
+        let mut s = self.state.lock().unwrap();
+        let mut store = self.store.lock().unwrap();
+        loop {
+            let referenced = s
+                .requests
+                .values()
+                .chain(s.retired.iter())
+                .filter_map(|handle| store.get(*handle).and_then(|r| r.after))
+                .collect::<BTreeSet<_>>();
+            let victims = s
+                .retired
+                .difference(&referenced)
+                .copied()
+                .collect::<Vec<_>>();
+            if victims.is_empty() {
+                break;
+            }
+            for h in victims {
+                s.retired.remove(&h);
+                store.remove(h);
+            }
+        }
+    }
+    pub fn with_config<T>(&self, read: impl FnOnce(&Config) -> T) -> T {
+        read(&self.state.lock().unwrap().config)
+    }
+    pub fn config_values(&self) -> crate::mtproto_config::ConfigFields {
+        self.state.lock().unwrap().config.values().clone()
+    }
+    pub fn environment(&self) -> Environment {
+        self.state.lock().unwrap().config.environment()
+    }
+    pub fn dc_persistent_key_changed(&self, dc: i32, key: Option<Arc<AuthKey>>) {
+        self.dc_temporary_key_changed(dc);
+        if crate::facade::is_temporary_dc_id(dc) {
+            return;
+        }
+        let mut s = self.state.lock().unwrap();
+        let same = match (s.keys.get(&dc), key.as_ref()) {
+            (None, None) => true,
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        };
+        if same {
+            return;
+        }
+        if let Some(key) = key {
+            s.keys.insert(dc, key);
+        } else {
+            s.keys.remove(&dc);
+        }
+        s.notice(Notice::WriteKeys);
+    }
+}
+
+struct EnvironmentSnapshot {
+    dc_options: DcOptions,
+    test: bool,
+    destroyer: bool,
+    device: String,
+    system: String,
+    languages: [String; 3],
+    proxy: ProxySettings,
+    callbacks: BTreeSet<i32>,
+}
+struct EnvironmentBridge {
+    snapshot: Mutex<EnvironmentSnapshot>,
+    events: Arc<Mutex<VecDeque<InstanceEvent>>>,
+    changes: Mutex<Vec<mpsc::UnboundedSender<EnvironmentChange>>>,
+    proxy_updates:
+        Mutex<Vec<mpsc::UnboundedSender<crate::details::mtproto_domain_resolver::Resolved>>>,
+}
+impl EnvironmentBridge {
+    fn new(fields: &Fields, mode: Mode) -> Self {
+        Self {
+            snapshot: Mutex::new(EnvironmentSnapshot {
+                dc_options: fields.config.dc_options.clone(),
+                test: fields.config.is_test_mode(),
+                destroyer: mode == Mode::KeysDestroyer,
+                device: fields.device_model.clone(),
+                system: fields.system_version.clone(),
+                languages: ["en".into(), "en".into(), "tdesktop".into()],
+                proxy: ProxySettings::default(),
+                callbacks: BTreeSet::new(),
+            }),
+            events: Arc::new(Mutex::new(VecDeque::new())),
+            changes: Mutex::new(vec![]),
+            proxy_updates: Mutex::new(vec![]),
+        }
+    }
+}
+impl SessionEnvironment for EnvironmentBridge {
+    fn dc_options(&self) -> DcOptions {
+        self.snapshot.lock().unwrap().dc_options.clone()
+    }
+    fn is_test_mode(&self) -> bool {
+        self.snapshot.lock().unwrap().test
+    }
+    fn is_keys_destroyer(&self) -> bool {
+        self.snapshot.lock().unwrap().destroyer
+    }
+    fn device_model(&self) -> String {
+        self.snapshot.lock().unwrap().device.clone()
+    }
+    fn system_version(&self) -> String {
+        self.snapshot.lock().unwrap().system.clone()
+    }
+    fn system_lang_code(&self) -> String {
+        self.snapshot.lock().unwrap().languages[0].clone()
+    }
+    fn cloud_lang_code(&self) -> String {
+        self.snapshot.lock().unwrap().languages[1].clone()
+    }
+    fn lang_pack_name(&self) -> String {
+        self.snapshot.lock().unwrap().languages[2].clone()
+    }
+    fn proxy_settings(&self) -> ProxySettings {
+        self.snapshot.lock().unwrap().proxy.clone()
+    }
+    fn has_callback(&self, id: i32) -> bool {
+        self.snapshot.lock().unwrap().callbacks.contains(&id)
+    }
+    fn subscribe(&self) -> mpsc::UnboundedReceiver<EnvironmentChange> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.changes.lock().unwrap().push(tx);
+        rx
+    }
+    fn emit(&self, event: InstanceEvent) {
+        self.events.lock().unwrap().push_back(event);
+    }
+}
+impl Instance {
+    pub fn session_environment(&self) -> Arc<dyn SessionEnvironment> {
+        self.sync_environment();
+        self.environment.clone()
+    }
+    fn sync_environment(&self) {
+        let s = self.state.lock().unwrap();
+        let mut snapshot = self.environment.snapshot.lock().unwrap();
+        snapshot.dc_options = s.config.dc_options.clone();
+        snapshot.device = s.device.clone();
+        snapshot.system = s.system.clone();
+        snapshot.languages = s.languages.clone();
+        snapshot.proxy = s.proxy.clone();
+        snapshot.callbacks = s.callbacks.keys().copied().collect();
+    }
+}
+impl Drop for State {
+    fn drop(&mut self) {
+        for session in self.sessions.values() {
+            session.send(SessionCommand::Kill);
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct WeakInstance {
+    state: std::sync::Weak<Mutex<State>>,
+    store: std::sync::Weak<Mutex<RequestStore>>,
+    environment: std::sync::Weak<EnvironmentBridge>,
+}
+impl Instance {
+    pub(crate) fn downgrade(&self) -> WeakInstance {
+        WeakInstance {
+            state: Arc::downgrade(&self.state),
+            store: Arc::downgrade(&self.store),
+            environment: Arc::downgrade(&self.environment),
+        }
+    }
+}
+impl WeakInstance {
+    pub(crate) fn upgrade(&self) -> Option<Instance> {
+        Some(Instance {
+            state: self.state.upgrade()?,
+            store: self.store.upgrade()?,
+            environment: self.environment.upgrade()?,
+        })
+    }
+    fn import_done(&self, response: &Response) {
+        if let Some(i) = self.upgrade() {
+            i.import_done(response);
+        }
+    }
+    fn import_fail(&self, error: &Error, response: &Response) -> bool {
+        self.upgrade()
+            .is_none_or(|i| i.import_fail(error, response))
+    }
+    fn export_done(&self, result: &tg_scheme::AuthExportedAuthorization, response: &Response) {
+        if let Some(i) = self.upgrade() {
+            i.export_done(result, response);
+        }
+    }
+    fn export_fail(&self, error: &Error, response: &Response) -> bool {
+        self.upgrade()
+            .is_none_or(|i| i.export_fail(error, response))
+    }
+    fn perform_key_destroy(&self, id: i32) {
+        if let Some(i) = self.upgrade() {
+            i.perform_key_destroy(id);
+        }
+    }
+    fn kill_session(&self, id: i32) {
+        if let Some(i) = self.upgrade() {
+            i.kill_session(id);
+        }
+    }
+    fn emit(&self, event: InstanceEvent) {
+        if let Some(i) = self.upgrade() {
+            i.emit(event);
+        }
+    }
+}
+
+impl Instance {
+    fn take_service_requests(&self) -> Vec<Notice> {
+        let mut s = self.state.lock().unwrap();
+        let mut result = vec![];
+        s.pub_events.retain(|notice| {
+            if matches!(notice, Notice::ConfigNeeded | Notice::HttpTimeNeeded) {
+                result.push(notice.clone());
+                false
+            } else {
+                true
+            }
+        });
+        result
+    }
+}
+
+impl Instance {
+    pub fn request_config_if_old(&self) {
+        let old = {
+            let s = self.state.lock().unwrap();
+            s.now - s.last_config
+                >= if s.config.fields.blocked_mode {
+                    8000
+                } else {
+                    120000
+                }
+        };
+        if old {
+            self.request_config();
+        }
+    }
+    pub fn request_config_if_expired(&self) -> Option<i64> {
+        let wait = {
+            let s = self.state.lock().unwrap();
+            s.config_expires - s.now
+        };
+        if wait > 0 {
+            Some(wait.min(3600000))
+        } else {
+            self.request_config();
+            None
+        }
+    }
+    pub fn set_user_phone(&self, phone: String) {
+        self.state.lock().unwrap().phone = phone;
+    }
+    pub fn user_phone(&self) -> String {
+        self.state.lock().unwrap().phone.clone()
+    }
+    pub fn request_cdn_config(&self) -> i32 {
+        if self.state.lock().unwrap().cdn_request != 0 || self.main_dc_id() == -1 {
+            return 0;
+        }
+        let weak = self.downgrade();
+        let id = self.send(
+            &tg_scheme::HelpGetCdnConfig::new(),
+            ResponseHandler {
+                done: Some(Box::new(move |response| {
+                    let mut reader = tg_tl::Reader::new(&response.reply);
+                    let Ok(result) =
+                        <tg_scheme::CdnConfig as tg_tl::Deserialize>::read(&mut reader)
+                    else {
+                        return false;
+                    };
+                    if let Some(instance) = weak.upgrade() {
+                        let mut s = instance.state.lock().unwrap();
+                        s.cdn_request = 0;
+                        s.config.dc_options.set_cdn_config(result.c_cdn_config());
+                        drop(s);
+                        instance.sync_environment();
+                        instance.broadcast(EnvironmentChange::CdnConfig);
+                    }
+                    true
+                })),
+                fail: None,
+            },
+            0,
+            0,
+            0,
+            0,
+        );
+        self.state.lock().unwrap().cdn_request = id;
+        id
+    }
+    pub fn sync_http_unixtime(&self) {
+        if tg_base::unixtime::http_valid() {
+            return;
+        }
+        let mut s = self.state.lock().unwrap();
+        if !s.http_time_loading {
+            s.http_time_loading = true;
+            s.notice(Notice::HttpTimeNeeded);
+        }
+    }
+}
+
+impl Instance {
+    pub fn resolve_proxy_domain(&self, host: &str, now: i64, random: &mut impl Random) {
+        let work = self
+            .state
+            .lock()
+            .unwrap()
+            .resolver
+            .resolve(host, now, random);
+        self.state.lock().unwrap().resolve_work.extend(work);
+        self.apply_resolved_domains();
+    }
+    pub fn poll_domain_requests(
+        &self,
+        now: i64,
+        random: &mut impl Random,
+    ) -> VecDeque<crate::details::mtproto_domain_resolver::Request> {
+        let mut s = self.state.lock().unwrap();
+        let work = s.resolver.poll(now, random);
+        s.resolve_work.extend(work);
+        std::mem::take(&mut s.resolve_work)
+    }
+    pub fn domain_request_finished(
+        &self,
+        request: &crate::details::mtproto_domain_resolver::Request,
+        bytes: &[u8],
+        now: i64,
+    ) {
+        self.state
+            .lock()
+            .unwrap()
+            .resolver
+            .request_finished(request, bytes, now);
+        self.apply_resolved_domains();
+    }
+    fn apply_resolved_domains(&self) {
+        let results = std::mem::take(&mut self.state.lock().unwrap().resolver.resolved);
+        for result in results {
+            self.apply_domain_ips(&result.domain, &result.ips, result.expire_at);
+            self.environment
+                .proxy_updates
+                .lock()
+                .unwrap()
+                .retain(|tx| tx.send(result.clone()).is_ok());
+        }
+    }
+    fn subscribe_proxy_domains(
+        &self,
+    ) -> mpsc::UnboundedReceiver<crate::details::mtproto_domain_resolver::Resolved> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.environment.proxy_updates.lock().unwrap().push(tx);
+        rx
+    }
+}
+
+impl Instance {
+    pub fn next_domain_deadline(&self) -> Option<i64> {
+        self.state.lock().unwrap().resolver.next_deadline()
+    }
+}
+
+fn numeric_suffix(kind: &str, prefix: &str) -> Option<i32> {
+    let n = kind.strip_prefix(prefix)?;
+    if n.is_empty() || !n.bytes().all(|c| c.is_ascii_digit()) {
+        None
+    } else {
+        Some(n.parse().unwrap_or(0))
+    }
+}
+
+impl State {
+    fn notice(&mut self, notice: Notice) {
+        self.notice_subscribers
+            .retain(|tx| tx.send(notice.clone()).is_ok());
+        self.pub_events.push_back(notice);
+    }
+}
+pub struct NoticeStream<T> {
+    events: mpsc::UnboundedReceiver<Notice>,
+    initial: Option<T>,
+    filter: fn(&Notice) -> Option<T>,
+}
+impl<T> NoticeStream<T> {
+    pub fn try_recv(&mut self) -> Result<T, mpsc::error::TryRecvError> {
+        if let Some(initial) = self.initial.take() {
+            return Ok(initial);
+        }
+        loop {
+            let event = self.events.try_recv()?;
+            if let Some(value) = (self.filter)(&event) {
+                return Ok(value);
+            }
+        }
+    }
+    pub async fn recv(&mut self) -> Option<T> {
+        if let Some(initial) = self.initial.take() {
+            return Some(initial);
+        }
+        while let Some(event) = self.events.recv().await {
+            if let Some(value) = (self.filter)(&event) {
+                return Some(value);
+            }
+        }
+        None
+    }
+}
+impl Instance {
+    pub fn subscribe_notices(&self) -> mpsc::UnboundedReceiver<Notice> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.state.lock().unwrap().notice_subscribers.push(tx);
+        rx
+    }
+    fn notice_stream<T>(
+        &self,
+        initial: Option<T>,
+        filter: fn(&Notice) -> Option<T>,
+    ) -> NoticeStream<T> {
+        NoticeStream {
+            events: self.subscribe_notices(),
+            initial,
+            filter,
+        }
+    }
+    pub fn main_dc_id_value(&self) -> NoticeStream<i32> {
+        self.notice_stream(Some(self.main_dc_id()), |notice| {
+            if let Notice::MainDc(id) = notice {
+                Some(*id)
+            } else {
+                None
+            }
+        })
+    }
+    pub fn write_keys_requests(&self) -> NoticeStream<()> {
+        self.notice_stream(None, |notice| {
+            matches!(notice, Notice::WriteKeys).then_some(())
+        })
+    }
+    pub fn all_keys_destroyed(&self) -> NoticeStream<()> {
+        self.notice_stream(None, |notice| {
+            matches!(notice, Notice::AllKeysDestroyed).then_some(())
+        })
+    }
+    pub fn temporary_key_changes(&self) -> NoticeStream<i32> {
+        self.notice_stream(None, |notice| {
+            if let Notice::TemporaryKeyChanged(id) = notice {
+                Some(*id)
+            } else {
+                None
+            }
+        })
+    }
+    pub fn restarts_by_timeout(&self) -> NoticeStream<i32> {
+        self.notice_stream(None, |notice| {
+            if let Notice::Restarted(id) = notice {
+                Some(*id)
+            } else {
+                None
+            }
+        })
+    }
+    pub fn non_premium_delayed_requests(&self) -> NoticeStream<i32> {
+        self.notice_stream(None, |notice| {
+            if let Notice::NonPremiumDelayed(id) = notice {
+                Some(*id)
+            } else {
+                None
+            }
+        })
+    }
+    pub fn frozen_error_received(&self) -> NoticeStream<()> {
+        self.notice_stream(None, |notice| {
+            matches!(notice, Notice::Frozen).then_some(())
+        })
+    }
+    pub fn dc_temporary_key_changed(&self, dc: i32) {
+        self.broadcast(EnvironmentChange::TemporaryKey(dc));
+        self.state
+            .lock()
+            .unwrap()
+            .notice(Notice::TemporaryKeyChanged(dc));
     }
 }

@@ -17,22 +17,27 @@ pub enum FailSkipPolicy {
 }
 pub type Runner = Arc<dyn Fn(Box<dyn FnOnce() + Send>) + Send + Sync>;
 pub(crate) struct Owner {
-    instance: Instance,
+    instance: Option<Instance>,
+    target: crate::mtp_instance::WeakInstance,
     requests: Mutex<BTreeSet<i32>>,
+    handlers: Mutex<std::collections::BTreeMap<i32, ResponseHandler>>,
     runner: Option<Runner>,
     concurrent: bool,
 }
 impl Drop for Owner {
     fn drop(&mut self) {
         let ids = std::mem::take(self.requests.get_mut().unwrap());
-        let instance = self.instance.clone();
+        self.handlers.get_mut().unwrap().clear();
+        let weak = self.target.clone();
         if self.concurrent {
             tg_runtime::on_main(move || {
-                for id in ids {
-                    instance.cancel(id);
+                if let Some(instance) = weak.upgrade() {
+                    for id in ids {
+                        instance.cancel(id);
+                    }
                 }
             });
-        } else {
+        } else if let Some(instance) = weak.upgrade() {
             for id in ids {
                 instance.cancel(id);
             }
@@ -53,15 +58,20 @@ impl Sender {
     ) -> Self {
         Self {
             owner: Arc::new(Owner {
-                instance,
+                target: instance.downgrade(),
+                instance: if concurrent { None } else { Some(instance) },
                 requests: Mutex::new(BTreeSet::new()),
+                handlers: Mutex::new(std::collections::BTreeMap::new()),
                 runner,
                 concurrent,
             }),
         }
     }
     pub fn instance(&self) -> &Instance {
-        &self.owner.instance
+        self.owner
+            .instance
+            .as_ref()
+            .expect("ConcurrentSender only holds a weak Instance")
     }
     pub fn request<R: Function>(&self, request: R) -> RequestBuilder<'_, R> {
         RequestBuilder {
@@ -84,23 +94,36 @@ impl Sender {
     }
     pub fn cancel(&self, id: i32) {
         if self.owner.requests.lock().unwrap().remove(&id) {
-            let instance = self.instance().clone();
+            self.owner.handlers.lock().unwrap().remove(&id);
+            let weak = self.owner.target.clone();
             if self.owner.concurrent {
-                tg_runtime::on_main(move || instance.cancel(id));
-            } else {
+                tg_runtime::on_main(move || {
+                    if let Some(instance) = weak.upgrade() {
+                        instance.cancel(id);
+                    }
+                });
+            } else if let Some(instance) = weak.upgrade() {
                 instance.cancel(id);
             }
         }
     }
     pub fn detach(&self, id: i32) {
         self.owner.requests.lock().unwrap().remove(&id);
+        self.owner.handlers.lock().unwrap().remove(&id);
     }
     pub fn request_cancelling_discard(&self) {
         self.owner.requests.lock().unwrap().clear();
     }
     pub fn request_send_delayed(&self) {
-        if let Some(session) = self.instance().session(0) {
-            session.send(crate::session::SessionCommand::Wake);
+        let weak = self.owner.target.clone();
+        if self.owner.concurrent {
+            tg_runtime::on_main(move || {
+                if let Some(instance) = weak.upgrade() {
+                    instance.send_anything(0, 0);
+                }
+            });
+        } else if let Some(instance) = weak.upgrade() {
+            instance.send_anything(0, 0);
         }
     }
 }
@@ -182,88 +205,218 @@ where
         } else {
             self.override_id
         };
-        self.sender.owner.requests.lock().unwrap().insert(id);
-        let weak = Arc::downgrade(&self.sender.owner);
-        let mut done = self.done;
-        let done_handler = Box::new(move |response: &Response| {
-            let Some(owner) = weak.upgrade() else {
-                return true;
-            };
-            if !owner.requests.lock().unwrap().remove(&response.request_id) {
-                return true;
-            }
-            let handler = done.take();
+        let mut callback = self.done;
+        let has_done = callback.is_some();
+        let done = Box::new(move |response: &Response| {
+            let onstack = callback.take();
             let mut reader = Reader::new(&response.reply);
             let Ok(value) = R::Response::read(&mut reader) else {
                 return false;
             };
-            if let Some(handler) = handler {
-                if let Some(runner) = &owner.runner {
-                    let weak = Arc::downgrade(&owner);
-                    let response = response.clone();
-                    runner(Box::new(move || {
-                        if weak.upgrade().is_some() {
-                            handler(value, &response);
-                        }
-                    }));
-                } else {
-                    handler(value, response);
-                }
+            if let Some(callback) = onstack {
+                callback(value, response);
             }
             true
         });
-        let weak = Arc::downgrade(&self.sender.owner);
-        let policy = self.policy;
         let fail = self.fail;
-        let fail = Arc::new(Mutex::new(fail));
-        let fail_handler = Box::new(move |error: &Error, response: &Response| {
-            if error.is_default_handled_error() && matches!(policy, FailSkipPolicy::Simple) {
-                return false;
+        let fail = Box::new(move |error: &Error, response: &Response| {
+            if let Some(fail) = &fail {
+                fail(error, response);
             }
+            true
+        });
+        self.sender.owner.handlers.lock().unwrap().insert(
+            id,
+            ResponseHandler {
+                done: if has_done { Some(done) } else { None },
+                fail: Some(fail),
+            },
+        );
+        self.sender.owner.requests.lock().unwrap().insert(id);
+        let lifetime = if self.sender.owner.concurrent {
+            None
+        } else {
+            Some(Arc::new(RawLifetime {
+                owner: Arc::downgrade(&self.sender.owner),
+                id,
+            }))
+        };
+        let done_lifetime = lifetime.clone();
+        let weak = Arc::downgrade(&self.sender.owner);
+        let done_handler = Box::new(move |response: &Response| {
+            let _lifetime = &done_lifetime;
+            let Some(owner) = weak.upgrade() else {
+                return true;
+            };
+            if let Some(runner) = &owner.runner {
+                let weak = Arc::downgrade(&owner);
+                let response = response.clone();
+                runner(Box::new(move || {
+                    let handlers = weak.upgrade().and_then(|owner| {
+                        owner.requests.lock().unwrap().remove(&response.request_id);
+                        owner.handlers.lock().unwrap().remove(&response.request_id)
+                    });
+                    if let Some(mut handlers) = handlers {
+                        if handlers.done.as_mut().is_some_and(|done| !done(&response)) {
+                            if let Some(fail) = handlers.fail {
+                                fail(
+                                    &Error::local(
+                                        "RESPONSE_PARSE_FAILED",
+                                        "ConcurrentSender::senderRequestDone",
+                                    ),
+                                    &response,
+                                );
+                            }
+                        }
+                    }
+                }));
+                return true;
+            }
+            owner.requests.lock().unwrap().remove(&response.request_id);
+            let mut handlers = owner
+                .handlers
+                .lock()
+                .unwrap()
+                .remove(&response.request_id)
+                .unwrap_or_default();
+            drop(owner);
+            let result = handlers.done.as_mut().is_none_or(|done| done(response));
+            if !result {
+                if let Some(owner) = weak.upgrade() {
+                    handlers.done = None;
+                    owner
+                        .handlers
+                        .lock()
+                        .unwrap()
+                        .insert(response.request_id, handlers);
+                }
+            }
+            result
+        });
+        let policy = self.policy;
+        let weak = Arc::downgrade(&self.sender.owner);
+        let fail_handler = Box::new(move |error: &Error, response: &Response| {
+            let _lifetime = &lifetime;
             if error.is_default_handled_error()
-                && !error.is_flood_error()
-                && matches!(policy, FailSkipPolicy::HandleFlood)
+                && (matches!(policy, FailSkipPolicy::Simple)
+                    || (matches!(policy, FailSkipPolicy::HandleFlood) && !error.is_flood_error()))
             {
                 return false;
             }
             let Some(owner) = weak.upgrade() else {
                 return true;
             };
-            owner.requests.lock().unwrap().remove(&response.request_id);
-            let fail = fail.clone();
             if let Some(runner) = &owner.runner {
                 let weak = Arc::downgrade(&owner);
                 let error = error.clone();
                 let response = response.clone();
                 runner(Box::new(move || {
-                    if weak.upgrade().is_some() {
-                        if let Some(f) = &*fail.lock().unwrap() {
-                            f(&error, &response);
+                    let handlers = weak.upgrade().and_then(|owner| {
+                        owner.requests.lock().unwrap().remove(&response.request_id);
+                        owner.handlers.lock().unwrap().remove(&response.request_id)
+                    });
+                    if let Some(handlers) = handlers {
+                        if let Some(fail) = handlers.fail {
+                            fail(&error, &response);
                         }
                     }
                 }));
-            } else if let Some(f) = &*fail.lock().unwrap() {
-                f(error, response);
+            } else {
+                owner.requests.lock().unwrap().remove(&response.request_id);
+                let handlers = owner.handlers.lock().unwrap().remove(&response.request_id);
+                drop(owner);
+                if let Some(handlers) = handlers {
+                    if let Some(fail) = handlers.fail {
+                        fail(error, response);
+                    }
+                }
             }
             true
         });
         let callbacks = ResponseHandler {
-            done: Some(done_handler),
+            done: if has_done { Some(done_handler) } else { None },
             fail: Some(fail_handler),
         };
-        let instance = self.sender.instance().clone();
+        let weak = self.sender.owner.target.clone();
         let request = SerializedRequest::serialize(&self.request, 0);
         let (dc, wait, after) = (self.dc, self.wait, self.after);
         if self.sender.owner.concurrent {
-            let weak = Arc::downgrade(&self.sender.owner);
+            let owner = Arc::downgrade(&self.sender.owner);
             tg_runtime::on_main(move || {
-                if weak.upgrade().is_some() {
-                    instance.send_serialized(id, request, callbacks, dc, wait, after, true);
+                if owner.upgrade().is_some() {
+                    if let Some(instance) = weak.upgrade() {
+                        instance.send_serialized(id, request, callbacks, dc, wait, after, true);
+                    }
                 }
             });
-        } else {
+        } else if let Some(instance) = weak.upgrade() {
             instance.send_serialized(id, request, callbacks, dc, wait, after, true);
         }
         id
+    }
+}
+
+pub struct SentRequest<'a> {
+    sender: &'a Sender,
+    id: i32,
+}
+impl SentRequest<'_> {
+    pub fn cancel(&self) {
+        self.sender.cancel(self.id);
+    }
+    pub fn detach(&self) {
+        self.sender.detach(self.id);
+    }
+}
+impl Sender {
+    pub fn sent_request(&self, id: i32) -> SentRequest<'_> {
+        SentRequest { sender: self, id }
+    }
+    pub fn request_canceller(&self) -> impl Fn(i32) + '_ {
+        move |id| self.cancel(id)
+    }
+    pub fn cancel_all(&self) {
+        let ids = self
+            .owner
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        for id in ids {
+            self.cancel(id);
+        }
+    }
+}
+
+struct RawLifetime {
+    owner: std::sync::Weak<Owner>,
+    id: i32,
+}
+impl Drop for RawLifetime {
+    fn drop(&mut self) {
+        if let Some(owner) = self.owner.upgrade() {
+            owner.handlers.lock().unwrap().remove(&self.id);
+        }
+    }
+}
+
+impl Sender {
+    pub(crate) fn new_weak(instance: Instance) -> Self {
+        let target = instance.downgrade();
+        Self {
+            owner: Arc::new(Owner {
+                instance: None,
+                target,
+                requests: Mutex::new(BTreeSet::new()),
+                handlers: Mutex::new(std::collections::BTreeMap::new()),
+                runner: None,
+                concurrent: false,
+            }),
+        }
+    }
+    pub(crate) fn upgrade_instance(&self) -> Option<Instance> {
+        self.owner.target.upgrade()
     }
 }
