@@ -1,0 +1,25 @@
+2026-11-13, Linux x86_64 little-endian, Rust 1.95.0.
+Original AyuGramDesktop 0f2a31bb420de98f331990432265b131b8d836b5, clean.
+
+PASS cargo fmt --check
+PASS cargo clippy --workspace --all-targets -- -D warnings
+PASS cargo test --workspace: 643 passed, 0 failed, 3 unchanged ignored (110 suites).
+PASS final cargo test -p tg-cache: 13 passed, 0 failed, 0 ignored.
+
+PASS native fixture generation: GCC 15.3.0, Qt Core 6.11.2, OpenSSL 3.6.5.
+30 CTR/derive vectors, 22 header/file probes, 8 Move cases, 1 cross-device case.
+Final zero-IV/ff-counter corpus regenerated and package tests repeated.
+Fixture and original-source SHA256: tests/fixtures/manifest.json.
+
+PASS Rust/native key64 read and exact rewrite.
+PASS Rust/native key256 read and exact rewrite.
+Synthetic exporter: examples/cache_reference.rs, OS randomness preserved.
+Native verify outputs under /tmp/ayugram-cache-rust-native-final-20261113.
+
+PASS original ordinary sections and POSIX two-process reader/writer takeover.
+PASS padding lengths 0..65; buffer mutation and read-only write rollback.
+
+Not checked: Windows/macOS runtime, non-GNU/Linux move fallback, syscall
+short-write/ENOSPC/flush timing and concurrent filesystem mutation races.
+QFile buffering is not emulated. No actual user data or live login was used.
+The Cache database/binlog/cleaner/compactor are outside this slice.

@@ -1241,3 +1241,33 @@ cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace:
 Краткий протокол — crates/tg-core/docs/verification/storage-lists.txt;
 полные локальные логи — /tmp/ayugram-codex-storage-workspace.log и
 /tmp/ayugram-codex-storage-final.log.
+
+## 13.11.2026: работа разделена, файловый слой tg-cache
+
+Пользователь поручил вести работу параллельно с Claude на другой машине.
+Распределение — docs/parallel-work.md. Для Claude сохранён WIP lang/countries
+в handoff/claude-lang-countries, готовое задание — docs/tasks/claude-lang-countries.md.
+Снимок исходной незавершённой работы не влит в main; обнаруженные два падения
+его language tests записаны в handoff. Исходный грязный worktree сохранён.
+
+Codex в port/cache-file-format перенёс storage_encryption и
+storage_encrypted_file в tg-cache: AES-CTR/key derivation, TDEF, header,
+read/write/padding, seek/offset/size, FileLock и Move. Native оригинал читает
+Rust файлы обоих размеров ключа и пересоздаёт их побайтно идентично. Обратное
+чтение проверяется fixtures, включая повреждения/обрезания/формат/checksum.
+Перенесены обычные секции исходных тестов и POSIX two-process takeover.
+Реальные данные пользователя не использовались, живых входов не было.
+
+PASS Rust 1.95.0: fmt, clippy --workspace --all-targets -D warnings,
+cargo test --workspace — 643 passed, 0 failed, 3 прежних ignored;
+финальный tg-cache — 13 passed, 0 failed, 0 ignored. Native: 30 CTR vectors,
+22 file probes, 8 Move cases, cross-device Move и byte-exact Rust → C++ rewrite.
+Отчёт — docs/handoffs/codex-cache-file.md, карта — crates/tg-cache/docs/port-map.md.
+
+Две строки storage_encryption — done. storage_encrypted_file.cpp/.h и
+storage_encrypted_file_tests.cpp — partial: Windows/macOS runtime и ошибка
+диска/буферизация QFile остаются непроверенными; std::fs не эмулирует QFile
+buffering. Остальные Cache/binlog/database/cleaner/compactor — todo.
+Этап 3 полностью не закрыт. Версии зависимостей не обновлялись: tg-cache
+использует уже имеющиеся aes/ctr/nix/tg-base. Cargo.lock меняет только
+зависимости пакета tg-cache.

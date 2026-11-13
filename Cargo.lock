@@ -1364,6 +1364,12 @@ dependencies = [
 [[package]]
 name = "tg-cache"
 version = "0.0.0"
+dependencies = [
+ "aes",
+ "ctr",
+ "nix",
+ "tg-base",
+]
 
 [[package]]
 name = "tg-calls"
