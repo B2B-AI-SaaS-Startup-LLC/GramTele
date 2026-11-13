@@ -1,7 +1,7 @@
 # Encrypted files, including extensionless values and version/binlog, are bytes.
-database/** -text
-database-probes/** -text
-*.tdef -text
-*.bin -text
-*.csv text eol=lf
-*.txt text eol=lf
+database/** binary
+database-probes/** binary
+*.tdef binary
+*.bin binary
+*.csv text eol=lf diff merge
+*.txt text eol=lf diff merge
