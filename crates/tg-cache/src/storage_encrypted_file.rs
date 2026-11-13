@@ -33,9 +33,40 @@ pub struct File {
     encryption_offset: i64,
     data_size: i64,
     state: Option<CtrState>,
+    random: Option<std::sync::Arc<dyn RandomSource>>,
+    // QFileDevice buffers writes up to 16 KiB, flushes on seek/read/close,
+    // and retains unwritten bytes after a short flush. `pos` is logical.
+    pending: Vec<u8>,
+    plain_position: i64,
+    mode: Option<Mode>,
+}
+
+/// Entropy for salts, value names and padding. Production uses the OS source;
+/// an explicit source permits reproducible native format tests without globals.
+pub trait RandomSource: Send + Sync {
+    fn fill(&self, bytes: &mut [u8]);
+}
+pub struct SystemRandom;
+impl RandomSource for SystemRandom {
+    fn fill(&self, bytes: &mut [u8]) {
+        random_fill(bytes);
+    }
 }
 
 impl File {
+    pub fn with_random(random: std::sync::Arc<dyn RandomSource>) -> Self {
+        let mut result = Self::default();
+        result.random = Some(random);
+        result
+    }
+
+    fn fill_random(&self, bytes: &mut [u8]) {
+        if let Some(random) = &self.random {
+            random.fill(bytes);
+        } else {
+            random_fill(bytes);
+        }
+    }
     pub fn open(&mut self, path: &Path, mode: Mode, key: &EncryptionKey) -> Result {
         self.close();
         let Ok(path) = std::path::absolute(path) else {
@@ -56,6 +87,7 @@ impl File {
     }
 
     fn attempt_open(&mut self, path: &Path, mode: Mode, key: &EncryptionKey) -> Result {
+        self.mode = Some(mode);
         if mode == Mode::Read {
             let Ok(file) = DataFile::open(path) else {
                 return Result::Failed;
@@ -96,7 +128,7 @@ impl File {
             return false;
         }
         let mut header = [0; HEADER_SIZE];
-        random_fill(&mut header[..SALT_SIZE]);
+        self.fill_random(&mut header[..SALT_SIZE]);
         self.state = Some(key.prepare_ctr_state(&header[..SALT_SIZE]));
         let checksum = sha256_parts(&[key.data(), &header[..CHECKSUM_OFFSET]]);
         header[CHECKSUM_OFFSET..].copy_from_slice(&checksum);
@@ -143,27 +175,61 @@ impl File {
     }
 
     fn position(&mut self) -> Option<i64> {
-        self.data.as_mut()?.stream_position().ok().map(|v| v as i64)
+        self.data.as_ref().map(|_| self.plain_position)
     }
 
     fn seek_plain(&mut self, offset: i64) -> bool {
-        offset >= 0
+        let success = offset >= 0
+            && self.flush()
             && self
                 .data
                 .as_mut()
-                .is_some_and(|file| file.seek(SeekFrom::Start(offset as u64)).is_ok())
+                .is_some_and(|file| file.seek(SeekFrom::Start(offset as u64)).is_ok());
+        if success {
+            self.plain_position = offset;
+        }
+        success
     }
 
     fn read_plain(&mut self, bytes: &mut [u8]) -> isize {
-        self.data
-            .as_mut()
-            .map_or(-1, |file| file.read(bytes).map_or(-1, |v| v as isize))
+        if self.mode == Some(Mode::Write) || !self.flush() {
+            return -1;
+        }
+        let count = self.data.as_mut().map_or(-1, |file| {
+            let mut count = 0;
+            while count < bytes.len() {
+                match file.read(&mut bytes[count..]) {
+                    Ok(0) => break,
+                    Ok(n) => count += n,
+                    Err(_) => return if count == 0 { -1 } else { count as isize },
+                }
+            }
+            count as isize
+        });
+        if count > 0 {
+            self.plain_position += count as i64;
+        }
+        count
     }
 
     fn write_plain(&mut self, bytes: &[u8]) -> isize {
-        self.data
-            .as_mut()
-            .map_or(-1, |file| file.write(bytes).map_or(-1, |v| v as isize))
+        if self.data.is_none() || self.mode == Some(Mode::Read) {
+            return -1;
+        }
+        const CHUNK: usize = 16384;
+        if self.pending.len() + bytes.len() > CHUNK && !self.flush() {
+            return -1;
+        }
+        let count = if bytes.len() > CHUNK {
+            Self::write_engine(self.data.as_mut().unwrap(), bytes)
+        } else {
+            self.pending.extend_from_slice(bytes);
+            bytes.len() as isize
+        };
+        if count > 0 {
+            self.plain_position += count as i64;
+        }
+        count
     }
 
     fn decrypt(&mut self, bytes: &mut [u8]) {
@@ -260,7 +326,7 @@ impl File {
         }
         let mut padded = [0; CtrState::BLOCK_SIZE];
         padded[..part].copy_from_slice(&bytes[good..]);
-        random_fill(&mut padded[part..]);
+        self.fill_random(&mut padded[part..]);
         if self.write(&mut padded) {
             return true;
         }
@@ -274,7 +340,29 @@ impl File {
     }
 
     pub fn flush(&mut self) -> bool {
-        self.data.as_mut().is_some_and(|file| file.flush().is_ok())
+        let Some(file) = self.data.as_mut() else {
+            return false;
+        };
+        if !self.pending.is_empty() {
+            let count = Self::write_engine(file, &self.pending).max(0) as usize;
+            let full = count == self.pending.len();
+            self.pending.drain(..count);
+            if !full {
+                return false;
+            }
+        }
+        file.flush().is_ok()
+    }
+
+    fn write_engine(file: &mut DataFile, bytes: &[u8]) -> isize {
+        let mut written = 0;
+        while written < bytes.len() {
+            match file.write(&bytes[written..]) {
+                Ok(0) | Err(_) => return if written == 0 { -1 } else { written as isize },
+                Ok(n) => written += n,
+            }
+        }
+        written as isize
     }
 
     pub fn is_open(&self) -> bool {
@@ -300,10 +388,14 @@ impl File {
 
     pub fn close(&mut self) {
         self.lock.unlock();
+        self.flush();
         self.data = None;
         self.data_size = 0;
         self.encryption_offset = 0;
         self.state = None;
+        self.pending.clear();
+        self.plain_position = 0;
+        self.mode = None;
     }
 
     pub fn move_file(from: &Path, to: &Path) -> bool {

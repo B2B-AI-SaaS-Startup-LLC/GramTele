@@ -60,5 +60,6 @@ nix develop --command cargo run -p tg-cache --example cache_reference -- /tmp/ne
 Rust-тесты дополнительно переносят обычные секции оригинального
 storage_encrypted_file_tests.cpp и двухпроцессное чтение/захват writer,
 проверяют все остатки padding 0..65, отмену мутации буфера после неудачной
-записи, closed/seek и precondition panic. OS failure injection, races,
-буферизация QFile и Windows/macOS runtime этим эталоном не проверены.
+записи, closed/seek и precondition panic. В новом [эталоне базы](../database-reference/README.md) отдельно закрыты
+буферизация QFile, short write/ENOSPC/flush и все процессные секции без sleep.
+Windows/macOS runtime и произвольные внешние гонки ФС не запускались.

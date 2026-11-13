@@ -417,7 +417,6 @@ fn native_move_across_filesystems_copies_then_removes_source() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn original_child_process_file_holder() {
     let Some(path) = std::env::var_os("TG_CACHE_TEST_HOLDER") else {
@@ -433,17 +432,19 @@ fn original_child_process_file_holder() {
     assert_eq!(file.read(&mut bytes), 16);
     assert_eq!(bytes, [3; 16]);
     assert!(file.write(&mut bytes) && file.flush());
-    fs::write(path.with_extension("ready"), b"ready").unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(15));
+    use std::io::{Read, Write};
+    println!("holder-ready");
+    std::io::stdout().flush().unwrap();
+    // An open pipe keeps the holder alive until FileLock terminates it.
+    let mut byte = [0; 1];
+    std::io::stdin().read_exact(&mut byte).unwrap();
 }
 
-#[cfg(unix)]
 #[test]
 fn original_two_process_read_and_writer_takeover() {
     use std::{
-        os::unix::process::ExitStatusExt,
-        process::Command,
-        time::{Duration, Instant},
+        io::{BufRead, BufReader},
+        process::{Command, Stdio},
     };
     let temp = Temp::new();
     let path = temp.file();
@@ -456,24 +457,33 @@ fn original_two_process_read_and_writer_takeover() {
             "--exact",
             "original_child_process_file_holder",
             "--test-threads=1",
+            "--nocapture",
         ])
         .env("TG_CACHE_TEST_HOLDER", &path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !path.with_extension("ready").exists() {
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("holder did not become ready");
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    loop {
+        line.clear();
+        assert!(
+            output.read_line(&mut line).unwrap() > 0,
+            "holder exited before ready"
+        );
+        if line.contains("holder-ready") {
+            break;
         }
-        std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(file.open(&path, Mode::Read, &key(64)), Result::Success);
     let mut data = [0; 32];
     assert_eq!(file.read(&mut data), 32);
     assert_eq!(data, [3; 32]);
     file.close();
+    // Child::wait closes its stdin. Keep our pipe outside Child so the
+    // helper remains blocked until FileLock actually terminates it.
+    let _keep_stdin_open = child.stdin.take().unwrap();
     let reaper = std::thread::spawn(move || child.wait().unwrap());
     assert_eq!(
         file.open(&path, Mode::ReadAppend, &key(64)),
@@ -481,5 +491,92 @@ fn original_two_process_read_and_writer_takeover() {
     );
     assert_eq!(file.read(&mut data), 32);
     assert_eq!(data, [3; 32]);
-    assert_eq!(reaper.join().unwrap().signal(), Some(15));
+    let status = reaper.join().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(status.signal(), Some(15));
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = status;
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[test]
+fn file_fault_child() {
+    let Some(root) = std::env::var_os("TG_CACHE_FAULT_CHILD") else {
+        return;
+    };
+    use nix::sys::{
+        resource::{getrlimit, setrlimit, Resource},
+        signal::{SigSet, Signal},
+    };
+    let mut mask = SigSet::empty();
+    mask.add(Signal::SIGXFSZ);
+    mask.thread_block().unwrap();
+    let root = PathBuf::from(root);
+    for large in [false, true] {
+        let (soft, hard) = getrlimit(Resource::RLIMIT_FSIZE).unwrap();
+        setrlimit(Resource::RLIMIT_FSIZE, 124, hard).unwrap();
+        let path = root.join(if large { "large" } else { "small" });
+        let mut f = File::default();
+        let opened = f.open(&path, Mode::Write, &key(64));
+        let mut b = vec![7; if large { 32768 } else { 16 }];
+        let original = b.clone();
+        let wrote = f.write(&mut b);
+        let flushed = f.flush();
+        println!(
+            "oracle:{},{},{},{},{},{},{},{}",
+            if large { "large" } else { "small" },
+            opened as u8,
+            u8::from(wrote),
+            u8::from(flushed),
+            f.offset(),
+            f.size(),
+            u8::from(b == original),
+            fs::metadata(&path).unwrap().len()
+        );
+        f.close();
+        setrlimit(Resource::RLIMIT_FSIZE, soft, hard).unwrap();
+    }
+    let mut f = File::default();
+    let opened = f.open(Path::new("/dev/full"), Mode::Write, &key(64));
+    let wrote = f.write(&mut [7; 16]);
+    let flushed = f.flush();
+    println!(
+        "oracle:full,{},{},{},{},{}",
+        opened as u8,
+        u8::from(wrote),
+        u8::from(flushed),
+        f.offset(),
+        f.size()
+    );
+    assert!(!f.seek(0));
+    assert_eq!(f.read(&mut [0; 16]), 0);
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[test]
+fn native_qfile_buffering_short_write_enospc_and_flush_failures() {
+    let t = Temp::new();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "file_fault_child", "--nocapture"])
+        .env("TG_CACHE_FAULT_CHILD", &t.0)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let actual = stdout
+        .lines()
+        .filter_map(|s| s.strip_prefix("oracle:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    assert_eq!(actual, include_str!("fixtures/file-faults.csv"));
 }

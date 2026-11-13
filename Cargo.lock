@@ -1369,6 +1369,8 @@ dependencies = [
  "ctr",
  "nix",
  "tg-base",
+ "tg-rpl",
+ "tg-runtime",
 ]
 
 [[package]]

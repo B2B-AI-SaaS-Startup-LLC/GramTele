@@ -1302,3 +1302,38 @@ crates/tg-core/docs/verification/data-ids.txt. Границы параллель
 обновлены в docs/parallel-work.md. Raw storage-list adapters и MTProto packet
 MsgId=u64 остаются прежними: это разные пространства ID. Session/stores и
 полный этап 4 ещё не закрыты, новых живых входов не выполнялось.
+
+
+### tg-cache: оставшаяся база медиа (port/cache-database)
+
+Срез от main 20695cb завершает все 24 файла lib_storage (4 598 строк):
+23 done, storage_pch.h replaced импортами Rust, partial/todo = 0.
+Предыдущие partial File.h/.cpp и encrypted_file_tests.cpp закрыты буферизацией
+QFile, native short-write/ENOSPC/flush и переносом процессных секций без sleep.
+
+Database/Databases, явный LE binlog codec, все Store/MultiStore/MultiRemove/
+MultiAccess, 7-байтный PlaceId, восстановление, delayed access/remove,
+pruning/лимиты, compactor/catch-up/атомарная замена и cleaner/clear_legacy
+используют реальную очередь tg-runtime и ConcurrentTimer. Stats — tg-rpl на main;
+Main::Session и Data не имитируются. Область Claude не изменялась.
+
+Карта: crates/tg-cache/docs/port-map.md — 252 строки, все с реализацией и
+исполняемым тестом, 0 отложенных. Все 20 исторических SECTION fe618bd652 + init timers
+перенесены как сценарии для текущего ccdc725; в native старый .cpp не включён.
+Большой тест на 102 400 записей включён. Сохранены отличия текущего API и
+порядок prune/touch на общей границе таймеров.
+
+Native CMake вне оригинала: 10 баз, 284 файла / 130 848 байт совпадают целиком;
+двусторонние чтение/значения/теги и дописанные Access (135 360 байт) совпадают;
+22 recovery-пробы, 72 файла / 14 797 байт, QFile faults и symlink-cleaner PASS.
+Manifest с исходными SHA256 и commits сохранён в tests/database-reference.
+Реальная tdata не открывалась. Windows/macOS runtime, power loss и произвольные
+внешние гонки ФС не запускались; границы и особенности оригинала перечислены
+в docs/handoffs/codex-cache-database.md и карте сценариев.
+
+Rust 1.95.0 / nix develop: fmt --check PASS; clippy --workspace --all-targets
+-D warnings PASS; test --workspace 678 passed, 0 failed, 3 прежних ignored.
+tg-cache: 40 тестов, +27 к предыдущим 13, новых ignored нет.
+Новых Rust-пакетов/версий нет: добавлены workspace tg-runtime/tg-rpl и feature
+resource у прежнего nix для RLIMIT_FSIZE. Интеграция — main и ветка в gramtele,
+без force push; подробный поимённый учёт 24 файлов — в handoff.

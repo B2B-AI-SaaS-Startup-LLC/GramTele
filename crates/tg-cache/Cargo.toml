@@ -9,9 +9,11 @@ publish = false
 aes = "0.9"
 ctr = "0.10"
 tg-base = { path = "../tg-base" }
+tg-runtime = { path = "../tg-runtime" }
+tg-rpl = { path = "../tg-rpl" }
 
 [target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
-nix = { version = "0.31", features = ["fs"] }
+nix = { version = "0.31", features = ["fs", "resource"] }
 
 [lints]
 workspace = true
