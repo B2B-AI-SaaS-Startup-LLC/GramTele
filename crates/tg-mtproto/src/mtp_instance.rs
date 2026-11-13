@@ -401,6 +401,14 @@ impl Instance {
             self.send_handle(target, handle, wait);
         }
     }
+    /// The serialized TL body of a request that is still registered, by its
+    /// request id. Not in the original: for tests and diagnostics, which
+    /// otherwise cannot see what a caller has sent without a server.
+    pub fn request_body(&self, id: i32) -> Option<tg_tl::Buffer> {
+        let handle = self.state.lock().unwrap().requests.get(&id).copied()?;
+        let store = self.store.lock().unwrap();
+        store.get(handle).map(|request| request.body().to_vec())
+    }
     pub fn cancel(&self, id: i32) {
         if id == 0 {
             return;

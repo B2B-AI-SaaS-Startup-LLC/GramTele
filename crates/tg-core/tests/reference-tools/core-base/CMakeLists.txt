@@ -26,3 +26,12 @@ target_include_directories(native_storage_trace PRIVATE
  ${TELEGRAM_ROOT}/SourceFiles ${TELEGRAM_ROOT}/lib_base
  ${TELEGRAM_ROOT}/lib_rpl ${TELEGRAM_ROOT}/lib_crl ${GSL_INCLUDE} ${RANGE_INCLUDE})
 target_link_libraries(native_storage_trace PRIVATE Qt6::Core)
+
+execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/extract_pack.py ${TELEGRAM_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/pack.cpp COMMAND_ERROR_IS_FATAL ANY)
+add_executable(native_pack ${CMAKE_CURRENT_BINARY_DIR}/pack.cpp)
+target_link_libraries(native_pack PRIVATE Qt6::Core)
+add_executable(native_countries countries.cpp ${TELEGRAM_ROOT}/SourceFiles/countries/countries_instance.cpp ${TELEGRAM_ROOT}/lib_base/base/assertion.cpp ${TELEGRAM_ROOT}/lib_base/base/integration.cpp)
+target_compile_options(native_countries PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/prefix.hpp -ffunction-sections -fdata-sections)
+target_link_options(native_countries PRIVATE -Wl,--gc-sections)
+target_include_directories(native_countries PRIVATE ${TELEGRAM_ROOT}/SourceFiles ${TELEGRAM_ROOT}/lib_base ${TELEGRAM_ROOT}/lib_rpl ${TELEGRAM_ROOT}/lib_crl ${GSL_INCLUDE} ${RANGE_INCLUDE})
+target_link_libraries(native_countries PRIVATE Qt6::Core)

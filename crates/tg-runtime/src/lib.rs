@@ -19,6 +19,7 @@ mod crl_on_main_queue;
 mod crl_queue;
 mod crl_semaphore;
 mod crl_time;
+mod main_local;
 mod util;
 
 pub use crl_async::{async_, sync};
@@ -43,4 +44,5 @@ pub use crl_on_main_queue::{
 pub use crl_queue::Queue;
 pub use crl_semaphore::Semaphore;
 pub use crl_time::{adjust_time, init_time, now, profile, ProfileTime, Time};
+pub use main_local::MainLocal;
 pub use util::Task;

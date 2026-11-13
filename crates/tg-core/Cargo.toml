@@ -10,12 +10,16 @@ workspace = true
 
 [dependencies]
 md-5 = "0.11"
+tg-scheme = { path = "../tg-scheme" }
+tg-tl = { path = "../tg-tl" }
+tg-ui = { path = "../tg-ui" }
 tg-base = { path = "../tg-base" }
 tg-mtproto = { path = "../tg-mtproto" }
 tg-rpl = { path = "../tg-rpl" }
 tg-runtime = { path = "../tg-runtime" }
 
 [dev-dependencies]
-tg-scheme = { path = "../tg-scheme" }
-tg-tl = { path = "../tg-tl" }
 tokio = { version = "1", features = ["rt", "macros"] }
+
+[build-dependencies]
+tg-codegen = { path = "../tg-codegen" }

@@ -1383,11 +1383,13 @@ version = "0.0.0"
 dependencies = [
  "md-5",
  "tg-base",
+ "tg-codegen",
  "tg-mtproto",
  "tg-rpl",
  "tg-runtime",
  "tg-scheme",
  "tg-tl",
+ "tg-ui",
  "tokio",
 ]
 

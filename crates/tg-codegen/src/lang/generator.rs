@@ -71,6 +71,12 @@ pub fn generate(pack: &LangPack, previous_indices: &str, file: &str) -> Result<G
         );
     }
     out += "];\n";
+    // `lt_*` tag constants, the same names as in the original.
+    for (index, tag) in pack.tags.iter().enumerate() {
+        out += &format!("pub const lt_{}: u16 = {index};\n", tag_ident(tag));
+    }
+    // `tr::lng_*` phrases.
+    out += "pub mod phrases {\nuse super::Phrase;\n";
     for (i, e) in pack.entries.iter().enumerate() {
         if !e.key_base.is_empty() && !e.key.ends_with("__plural0") {
             continue;
@@ -93,6 +99,7 @@ pub fn generate(pack: &LangPack, previous_indices: &str, file: &str) -> Result<G
             !e.key_base.is_empty()
         );
     }
+    out += "}\n";
     // Plural display modes retain C++ tag constants: count + 1000 / + 2000.
     if let Some(index) = pack.tags.iter().position(|x| x == "count") {
         out += &format!(
@@ -120,7 +127,7 @@ pub fn generate(pack: &LangPack, previous_indices: &str, file: &str) -> Result<G
     })
 }
 fn ident(s: &str) -> String {
-    let mut out = String::from("key_");
+    let mut out = String::new();
     for c in s.chars() {
         if c.is_ascii_alphanumeric() || c == '_' {
             out.push(c);
@@ -129,4 +136,7 @@ fn ident(s: &str) -> String {
         }
     }
     out
+}
+fn tag_ident(s: &str) -> String {
+    ident(s)
 }

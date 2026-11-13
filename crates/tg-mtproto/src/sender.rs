@@ -193,6 +193,41 @@ where
     pub fn fail_plain(self, f: impl Fn() + Send + 'static) -> Self {
         self.fail(move |_| f())
     }
+    /// `done` for a handler that is not `Send` because it captures state of
+    /// the main thread (`Rc`, `tg-rpl` values). Only for a main-thread
+    /// [`Sender`]: the handler is kept in a `MainLocal` of the calling thread
+    /// and may only run, and be dropped, there.
+    pub fn done_local(self, f: impl FnOnce(R::Response) + 'static) -> Self {
+        let f = tg_runtime::MainLocal::new(f);
+        self.done(move |value| {
+            if let Some(f) = f.take() {
+                f(value);
+            }
+        })
+    }
+    /// `done_local` for `done([=](const Result &result, mtpRequestId id)`.
+    pub fn done_local_with_id(self, f: impl FnOnce(R::Response, i32) + 'static) -> Self {
+        let f = tg_runtime::MainLocal::new(f);
+        self.done_with_id(move |value, id| {
+            if let Some(f) = f.take() {
+                f(value, id);
+            }
+        })
+    }
+    /// `fail` for a handler that is not `Send`; see [`Self::done_local`].
+    pub fn fail_local(self, f: impl Fn(&Error) + 'static) -> Self {
+        let f = tg_runtime::MainLocal::new(f);
+        self.fail(move |error| {
+            f.with(|f| f(error));
+        })
+    }
+    /// `fail_local` for `fail([=](const MTP::Error &error, mtpRequestId id)`.
+    pub fn fail_local_with_id(self, f: impl Fn(&Error, i32) + 'static) -> Self {
+        let f = tg_runtime::MainLocal::new(f);
+        self.fail_with_id(move |error, id| {
+            f.with(|f| f(error, id));
+        })
+    }
     pub fn handle_flood_errors(mut self) -> Self {
         self.policy = FailSkipPolicy::HandleFlood;
         self
