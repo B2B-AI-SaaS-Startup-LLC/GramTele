@@ -1187,3 +1187,57 @@ native-read-rust.hex; вход — crates/tg-mtproto/docs/login-diagnostics/.
 Вопросов по формату Ayu, требующих решения пользователя, нет. Причина входа
 остаётся открытой; лимит этого задания исчерпан. Пуш не выполняется, stash
 base-crypto сохраняется, чужие README/изображение не меняются.
+
+## 13.11.2026: независимые индексы истории и медиа
+
+В main включены существующие коммиты `a0f0f02` (граф и план этапа 4) и
+`be00773` (первые storage-модели) из port/core-base. Незакоммиченные lang,
+countries, UI/value contracts, runtime и Sender в отдельном рабочем дереве
+не переносились и не изменялись; они требуют своего завершения и проверки.
+
+Закончены SparseIdsList, SharedMedia, UserPhotos и Facade: восемь .cpp/.h
+отмечены done в ledger. Это независимые индексы в памяти, без подставного
+Main::Session. Все 13 типов медиа, peer/topic/monoforum, сортировка/слияние
+диапазонов, подсчёт пропусков, query/snapshot и rpl-события доступны в tg-core.
+Из первого коммита исправлены ручные u16-маски и BTreeSet: теперь используются
+существующие tg-base EnumMask (исходные 32 бита, all) и FlatSet. Сравнение
+SharedMediaKey соответствует исходному порядку полей.
+
+Сохранены особенности оригинала: removeOne уменьшает известный счётчик даже
+при отсутствии ID; removeAfter удаляет начиная с указанной фотографии;
+photo query перезаписывает count-based skippedBefore. Правка Ayu для обратного
+диапазона сохраняет применение count и событие, даже если сами ID не добавлены.
+
+Новый native_storage_trace компилирует неизменённые четыре исходных .cpp,
+настоящие lib_rpl/base::flat_set и Qt Core. MsgId/PeerId/UserId/PhotoId в
+headless-префиксе заменены соответствующими целыми значениями; оконный клиент
+и платформенный bootstrap не собираются. На 7031 детерминированной операции
+сравниваются каждое событие, завершение producer, query/snapshot/empty,
+countAfter и число вызовов предиката. Вход и ответы с SHA256 сохранены в
+tests/fixtures/core-base; воспроизведение описано там же. Ещё три Rust-теста
+проверяют чтение при подписке, известный нулевой count, завершение без значения
+и отписку с чтением snapshot из обработчика. Всего в новом срезе 14 тестов:
+10 storage_lists, 3 cloud_blob и один native trace.
+
+CloudBlob оставлен partial: распаковка ZIP выполняется, но BlobLoader,
+StateDescription, поле Progress::percent и Session/UI binding ещё отложены.
+Тесты ZIP — собственные, без заявления C++-паритета распаковки. Новых внешних
+зависимостей и изменений Cargo.lock в этом завершении нет.
+
+Этапы 2/3/4 целиком не закрыты: живой вход/QR/restore не подтверждены,
+Telegram settings/chat persistence/cache остаются дальше. Новых попыток
+тестового входа не выполнялось. Реальные tdata/ayudata пользователя не читались.
+Карта функций: crates/tg-core/docs/storage-lists-map.md.
+
+Целевой репозиторий по уточнению пользователя:
+https://github.com/B2B-AI-SaaS-Startup-LLC/GramTele (remote gramtele).
+remote.pushDefault установлен в gramtele; прежний origin сохранён.
+
+Проверки Rust 1.95.0 — PASS: cargo fmt --check;
+cargo clippy --workspace --all-targets -- -D warnings; cargo test --workspace:
+630 passed, 0 failed, 3 ignored. После окончательного перехода на FlatSet/EnumMask
+повторно прошли fmt, clippy всего workspace и cargo test -p tg-core:
+25 passed, 0 failed, 1 ignored (ручной exporter). Новых ignored нет.
+Краткий протокол — crates/tg-core/docs/verification/storage-lists.txt;
+полные локальные логи — /tmp/ayugram-codex-storage-workspace.log и
+/tmp/ayugram-codex-storage-final.log.

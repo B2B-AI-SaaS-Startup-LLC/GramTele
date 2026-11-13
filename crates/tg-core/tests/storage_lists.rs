@@ -85,6 +85,45 @@ fn sparse_query_limits_and_lazy_snapshot() {
     assert_eq!(r.message_ids, [10, 20].into());
     assert_eq!((r.skipped_before, r.skipped_after), (Some(0), Some(1)));
 }
+#[test]
+fn sparse_events_allow_snapshots_and_stop_after_unsubscribe() {
+    let list = Rc::new(SparseIdsList::default());
+    let count = Rc::new(std::cell::Cell::new(0));
+    let observed = count.clone();
+    let weak = Rc::downgrade(&list);
+    let life = list.slice_updated().on_next_returning(move |update| {
+        let list = weak.upgrade().unwrap();
+        assert_eq!(snapshot(&list, 1).count, update.count);
+        observed.set(observed.get() + 1);
+    });
+    list.add_new(1);
+    assert_eq!(count.get(), 1);
+    drop(life);
+    list.add_new(2);
+    assert_eq!(count.get(), 1);
+}
+
+#[test]
+fn sparse_query_completes_when_empty_and_emits_known_zero() {
+    let list = SparseIdsList::default();
+    let done = Rc::new(std::cell::Cell::new(0));
+    let emitted = Rc::new(std::cell::Cell::new(0));
+    for expected in [0, 1] {
+        let next = emitted.clone();
+        let completed = done.clone();
+        let _life = list.query(SparseIdsListQuery::default()).start_returning(
+            move |result| {
+                assert_eq!(result.count, Some(0));
+                next.set(next.get() + 1);
+            },
+            |_| unreachable!(),
+            move || completed.set(completed.get() + 1),
+        );
+        assert_eq!(emitted.get(), expected);
+        assert_eq!(done.get(), expected + 1);
+        list.remove_all();
+    }
+}
 fn photos(p: &UserPhotos, user: u64, id: u64, back: bool) -> Vec<UserPhotosResult> {
     let out = Rc::new(RefCell::new(Vec::new()));
     let copy = out.clone();
@@ -131,6 +170,30 @@ fn photo_order_back_intermediate_notifications_replace_remove() {
     assert_eq!(photos(&p, 1, 1, true)[0].photo_ids, Vec::from([8]));
 }
 #[test]
+fn photo_queries_read_existing_lists_at_subscription_time() {
+    let mut photos = UserPhotos::default();
+    let query = UserPhotosQuery {
+        key: UserPhotosKey {
+            user_id: 1,
+            photo_id: 2,
+            back: false,
+        },
+        limit_before: 1,
+        limit_after: 1,
+    };
+    let absent = photos.query(query);
+    photos.add_new(1, 1);
+    let existing = photos.query(query);
+    photos.add_new(1, 2);
+    let output = Rc::new(RefCell::new(Vec::new()));
+    let out = output.clone();
+    let _absent = absent.on_next_returning(move |value| out.borrow_mut().push(value));
+    assert!(output.borrow().is_empty());
+    let out = output.clone();
+    let _existing = existing.on_next_returning(move |value| out.borrow_mut().push(value));
+    assert_eq!(output.borrow()[0].photo_ids, Vec::from([1, 2]));
+}
+#[test]
 fn media_scopes_masks_facade_and_events() {
     let mut f = Facade::default();
     let query = |topic| SharedMediaQuery {
@@ -165,7 +228,7 @@ fn media_scopes_masks_facade_and_events() {
         topic_root_id: 2,
         monoforum_peer_id: 0,
         message_id: 20,
-        types: 1,
+        types: SharedMediaType::Photo.into(),
     });
     assert_eq!(f.snapshot(&query(2)).count, Some(2));
     f.remove_one(SharedMediaRemoveOne {
@@ -173,7 +236,7 @@ fn media_scopes_masks_facade_and_events() {
         topic_root_id: 0,
         monoforum_peer_id: 0,
         message_id: 10,
-        types: 1,
+        types: SharedMediaType::Photo.into(),
     });
     assert_eq!(f.snapshot(&query(0)).count, Some(1));
     assert_eq!(f.snapshot(&query(2)).count, Some(2));
@@ -183,7 +246,7 @@ fn media_scopes_masks_facade_and_events() {
         peer_id: 1,
         topic_root_id: 0,
         monoforum_peer_id: 0,
-        types: 1,
+        types: SharedMediaType::Photo.into(),
     });
     assert!(f.empty(&key));
     f.unload(SharedMediaUnloadThread {
@@ -245,4 +308,33 @@ fn sparse_native_reference() {
     assert_eq!(actual, include_str!("fixtures/core-base/sparse-native.txt"));
 }
 #[test]
-fn photos_native_reference(){let mut p=UserPhotos::default();let lines=Rc::new(RefCell::new(String::new()));let out=lines.clone();let _life=p.slice_updated().on_next_returning(move|u|{use std::fmt::Write;let mut text=out.borrow_mut();write!(text,"P {}:",u.count.map_or_else(||"-".into(),|v|v.to_string())).unwrap();for id in u.photo_ids{write!(text," {id}").unwrap();}text.push('\n');});p.add_slice(1,vec![3,2,1],3);p.set_back(1,9);p.add_new(1,4);p.replace(1,9,8);p.remove_after(1,3);p.remove_one(1,55);p.remove_after(1,99);assert_eq!(*lines.borrow(),include_str!("fixtures/core-base/photos-native.txt"));}
+fn photos_native_reference() {
+    let mut p = UserPhotos::default();
+    let lines = Rc::new(RefCell::new(String::new()));
+    let out = lines.clone();
+    let _life = p.slice_updated().on_next_returning(move |u| {
+        use std::fmt::Write;
+        let mut text = out.borrow_mut();
+        write!(
+            text,
+            "P {}:",
+            u.count.map_or_else(|| "-".into(), |v| v.to_string())
+        )
+        .unwrap();
+        for id in u.photo_ids {
+            write!(text, " {id}").unwrap();
+        }
+        text.push('\n');
+    });
+    p.add_slice(1, vec![3, 2, 1], 3);
+    p.set_back(1, 9);
+    p.add_new(1, 4);
+    p.replace(1, 9, 8);
+    p.remove_after(1, 3);
+    p.remove_one(1, 55);
+    p.remove_after(1, 99);
+    assert_eq!(
+        *lines.borrow(),
+        include_str!("fixtures/core-base/photos-native.txt")
+    );
+}

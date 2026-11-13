@@ -1,0 +1,9 @@
+{
+  "original": "0f2a31bb420de98f331990432265b131b8d836b5",
+  "seed": "0xA720261113",
+  "commands": 7031,
+  "sha256": {
+    "storage-trace.txt": "4e1389402c8a4df44dc5fc3e12b56523f5f192a946214392cc0c6d979c7f614d",
+    "storage-trace-native.txt": "a773b107de3f2009f35f750f15c37f548d8b83f4cf93aa707bf08fe47a12b8f2"
+  }
+}

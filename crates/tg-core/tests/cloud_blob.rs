@@ -1,8 +1,76 @@
-use std::{fs,path::PathBuf,sync::atomic::{AtomicUsize,Ordering}};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 use tg_base::zlib_help::*;
 use tg_core::storage::storage_cloud_blob::*;
-static NEXT:AtomicUsize=AtomicUsize::new(0);
-struct Temp(PathBuf);impl Temp{fn new()->Self{let p=std::env::temp_dir().join(format!("ayu-synthetic-blob-{}-{}",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));fs::create_dir_all(p.join("out")).unwrap();Self(p)}fn archive(&self,entries:&[(&str,&[u8])])->PathBuf{let mut z=FileToWrite::new();for(name,bytes)in entries{assert_eq!(z.open_new_file(name,None,&[],&[],None,Z_DEFLATED,6),ZIP_OK);assert_eq!(z.write_in_file(bytes),ZIP_OK);assert_eq!(z.close_file(),ZIP_OK);}z.close();let path=self.0.join("blob.zip");fs::write(&path,z.result()).unwrap();path}fn folder(&self)->String{self.0.join("out").to_str().unwrap().into()}}impl Drop for Temp{fn drop(&mut self){let _=fs::remove_dir_all(&self.0);}}
-#[test]fn extracts_selected_files_and_checks_traversal(){let t=Temp::new();let zip=t.archive(&[("good",b"abc"),("../escape",b"bad")]);assert!(unpack_blob(&zip,&t.folder(),|n|n=="good"));assert_eq!(fs::read(t.0.join("out/good")).unwrap(),b"abc");assert!(!unpack_blob(&zip,&t.folder(),|_|true));assert!(!t.0.join("escape").exists());}
-#[test]fn rejects_empty_files_missing_parents_and_corruption(){let t=Temp::new();let zip=t.archive(&[("empty",b"")]);assert!(!unpack_blob(&zip,&t.folder(),|_|true));let zip=t.archive(&[("missing/sub",b"x")]);assert!(!unpack_blob(&zip,&t.folder(),|_|true));fs::write(&zip,b"not zip").unwrap();assert!(!unpack_blob(&zip,&t.folder(),|_|true));assert!(!unpack_blob(&t.0.join("absent"),&t.folder(),|_|true));}
-#[test]fn rejects_oversized_archives_and_entries(){let t=Temp::new();let zip=t.0.join("blob.zip");fs::File::create(&zip).unwrap().set_len(10*1024*1024+1).unwrap();assert!(!unpack_blob(&zip,&t.folder(),|_|true));let content=vec![0u8;25*1024*1024+1];let zip=t.archive(&[("large",&content)]);assert!(!unpack_blob(&zip,&t.folder(),|_|true));}
+static NEXT: AtomicUsize = AtomicUsize::new(0);
+struct Temp(PathBuf);
+impl Temp {
+    fn new() -> Self {
+        let p = std::env::temp_dir().join(format!(
+            "ayu-synthetic-blob-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(p.join("out")).unwrap();
+        Self(p)
+    }
+    fn archive(&self, entries: &[(&str, &[u8])]) -> PathBuf {
+        let mut z = FileToWrite::new();
+        for (name, bytes) in entries {
+            assert_eq!(
+                z.open_new_file(name, None, &[], &[], None, Z_DEFLATED, 6),
+                ZIP_OK
+            );
+            assert_eq!(z.write_in_file(bytes), ZIP_OK);
+            assert_eq!(z.close_file(), ZIP_OK);
+        }
+        z.close();
+        let path = self.0.join("blob.zip");
+        fs::write(&path, z.result()).unwrap();
+        path
+    }
+    fn folder(&self) -> String {
+        self.0.join("out").to_str().unwrap().into()
+    }
+}
+impl Drop for Temp {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+#[test]
+fn extracts_selected_files_and_checks_traversal() {
+    let t = Temp::new();
+    let zip = t.archive(&[("good", b"abc"), ("../escape", b"bad")]);
+    assert!(unpack_blob(&zip, &t.folder(), |n| n == "good"));
+    assert_eq!(fs::read(t.0.join("out/good")).unwrap(), b"abc");
+    assert!(!unpack_blob(&zip, &t.folder(), |_| true));
+    assert!(!t.0.join("escape").exists());
+}
+#[test]
+fn rejects_empty_files_missing_parents_and_corruption() {
+    let t = Temp::new();
+    let zip = t.archive(&[("empty", b"")]);
+    assert!(!unpack_blob(&zip, &t.folder(), |_| true));
+    let zip = t.archive(&[("missing/sub", b"x")]);
+    assert!(!unpack_blob(&zip, &t.folder(), |_| true));
+    fs::write(&zip, b"not zip").unwrap();
+    assert!(!unpack_blob(&zip, &t.folder(), |_| true));
+    assert!(!unpack_blob(&t.0.join("absent"), &t.folder(), |_| true));
+}
+#[test]
+fn rejects_oversized_archives_and_entries() {
+    let t = Temp::new();
+    let zip = t.0.join("blob.zip");
+    fs::File::create(&zip)
+        .unwrap()
+        .set_len(10 * 1024 * 1024 + 1)
+        .unwrap();
+    assert!(!unpack_blob(&zip, &t.folder(), |_| true));
+    let content = vec![0u8; 25 * 1024 * 1024 + 1];
+    let zip = t.archive(&[("large", &content)]);
+    assert!(!unpack_blob(&zip, &t.folder(), |_| true));
+}

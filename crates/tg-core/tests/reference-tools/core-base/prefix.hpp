@@ -11,4 +11,5 @@ using MsgId = int64;
 constexpr auto ServerMaxMsgId = MsgId(1LL << 56);
 struct MsgRange { MsgId from = 0; MsgId till = 0; friend bool operator==(const MsgRange&,const MsgRange&)=default; };
 using UserId=uint64; using PhotoId=uint64;
+using PeerId=uint64;
 #include <deque>

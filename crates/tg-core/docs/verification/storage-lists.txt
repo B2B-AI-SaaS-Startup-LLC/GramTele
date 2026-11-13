@@ -1,0 +1,29 @@
+2026-11-13, Linux x86_64, Rust 1.95.0 (59807616e 2026-04-14)
+Original AyuGramDesktop: 0f2a31bb420de98f331990432265b131b8d836b5, clean tree.
+
+PASS cargo fmt --check
+PASS cargo clippy --workspace --all-targets -- -D warnings
+PASS cargo test --workspace: 630 passed, 0 failed, 3 ignored (109 suites).
+
+After the final FlatSet/EnumMask changes:
+PASS cargo fmt --check
+PASS cargo clippy --workspace --all-targets -- -D warnings
+PASS cargo test -p tg-core: 25 passed, 0 failed, 1 ignored (6 suites).
+The 14 new tests include 10 storage_lists, 3 cloud_blob, 1 storage_trace.
+Ignored tests are unchanged: two live DH tests and the manual tdata exporter.
+
+PASS native_storage_trace: GCC 15.3.0, Qt Core 6.11.2, CMake 4.1.6.
+Unmodified storage_sparse_ids_list/shared_media/user_photos/facade.cpp,
+original lib_rpl and base::flat_set; raw integer ID adapters in prefix.hpp.
+7031 deterministic commands; seed 0xA720261113; exact event/query output match.
+Fixture hashes: tests/fixtures/core-base/storage-trace-manifest.json.
+Reproduction: tests/fixtures/core-base/README.md.
+
+Native reference covers synchronous list/facade operations, events, query
+completion, empty, countAfter and predicate call counts. Deferred subscription
+and unsubscribe are covered by separate Rust tests. It does not establish
+parity for reentrant callback mutations, signed C++ overflow, GUI integration
+or a producer started after its original owner has been destroyed.
+Cloud ZIP tests are Rust tests, not native execution references.
+No live login attempts or real user data were used in this slice.
+Full local logs: /tmp/ayugram-codex-storage-{workspace,final}.log.

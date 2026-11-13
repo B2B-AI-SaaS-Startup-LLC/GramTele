@@ -1,5 +1,6 @@
 use super::storage_sparse_ids_list::*;
 use std::collections::BTreeMap;
+use tg_base::enum_mask::{EnumMask, EnumMaskValue};
 use tg_rpl::{EventStream, Lifetime, Producer};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
@@ -19,22 +20,29 @@ pub enum SharedMediaType {
     Poll,
 }
 pub const SHARED_MEDIA_TYPE_COUNT: usize = 13;
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl EnumMaskValue for SharedMediaType {
+    const COUNT: u32 = SHARED_MEDIA_TYPE_COUNT as u32;
+    fn index(self) -> u32 {
+        self as u32
+    }
+}
+pub type SharedMediaTypesMask = EnumMask<SharedMediaType>;
+#[derive(Clone, Debug)]
 pub struct SharedMediaAddNew {
     pub peer_id: u64,
     pub topic_root_id: i64,
     pub monoforum_peer_id: u64,
     pub message_id: i64,
-    pub types: u16,
+    pub types: SharedMediaTypesMask,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct SharedMediaAddExisting {
     pub peer_id: u64,
     pub topic_root_id: i64,
     pub monoforum_peer_id: u64,
     pub message_id: i64,
     pub no_skip_range: MsgRange,
-    pub types: u16,
+    pub types: SharedMediaTypesMask,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedMediaAddSlice {
@@ -46,26 +54,26 @@ pub struct SharedMediaAddSlice {
     pub type_: SharedMediaType,
     pub count: Option<i32>,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct SharedMediaRemoveOne {
     pub peer_id: u64,
     pub topic_root_id: i64,
     pub monoforum_peer_id: u64,
     pub message_id: i64,
-    pub types: u16,
+    pub types: SharedMediaTypesMask,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct SharedMediaRemoveAll {
     pub peer_id: u64,
     pub topic_root_id: i64,
     pub monoforum_peer_id: u64,
-    pub types: u16,
+    pub types: SharedMediaTypesMask,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedMediaInvalidateBottom {
     pub peer_id: u64,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SharedMediaKey {
     pub peer_id: u64,
     pub topic_root_id: i64,
@@ -147,9 +155,13 @@ impl SharedMedia {
             lists
         })
     }
-    fn selected(lists: &[SparseIdsList; 13], mask: u16, mut f: impl FnMut(&SparseIdsList)) {
+    fn selected(
+        lists: &[SparseIdsList; 13],
+        mask: SharedMediaTypesMask,
+        mut f: impl FnMut(&SparseIdsList),
+    ) {
         for (i, list) in lists.iter().enumerate() {
-            if mask & (1 << i) != 0 {
+            if mask.test(TYPES[i]) {
                 f(list);
             }
         }

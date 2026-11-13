@@ -1,5 +1,5 @@
 //! storage_sparse_ids_list: ranges are closed; zero/MAX certify known ends.
-use std::collections::BTreeSet;
+use tg_base::flat_set::FlatSet;
 use tg_rpl::{EventStream, Producer, Variable};
 pub const SERVER_MAX_MSG_ID: i64 = 1 << 56;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -18,17 +18,17 @@ pub struct SparseIdsListResult {
     pub count: Option<i32>,
     pub skipped_before: Option<i32>,
     pub skipped_after: Option<i32>,
-    pub message_ids: BTreeSet<i64>,
+    pub message_ids: FlatSet<i64>,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SparseIdsSliceUpdate {
-    pub messages: Option<BTreeSet<i64>>,
+    pub messages: Option<FlatSet<i64>>,
     pub range: MsgRange,
     pub count: Option<i32>,
 }
 #[derive(Clone, Default, PartialEq)]
 struct Slice {
-    messages: BTreeSet<i64>,
+    messages: FlatSet<i64>,
     range: MsgRange,
 }
 #[derive(Clone, Default, PartialEq)]
@@ -62,7 +62,7 @@ impl SparseIdsList {
         let mut added = 0;
         // AyuGram: reversed range is a no-op for slices, but addRange still applies count/emits.
         if range.from <= range.till {
-            let messages = messages.into_iter().collect::<BTreeSet<_>>();
+            let messages = messages.into_iter().collect::<FlatSet<_>>();
             if range.from != range.till || !messages.is_empty() {
                 let from = s.slices.partition_point(|v| v.range.till < range.from);
                 let till = s.slices.partition_point(|v| v.range.from <= range.till);
@@ -152,7 +152,7 @@ impl SparseIdsList {
         self.state.set(State {
             count: Some(0),
             slices: vec![Slice {
-                messages: BTreeSet::new(),
+                messages: FlatSet::default(),
                 range: MsgRange {
                     from: 0,
                     till: SERVER_MAX_MSG_ID,
@@ -167,7 +167,7 @@ impl SparseIdsList {
             .last_mut()
             .filter(|v| v.range.till == SERVER_MAX_MSG_ID)
         {
-            v.range.till = v.messages.last().copied().unwrap_or(v.range.from);
+            v.range.till = v.messages.back().copied().unwrap_or(v.range.from);
         }
         s.count = None;
         self.state.set(s);
@@ -185,15 +185,11 @@ impl SparseIdsList {
         if v.range.till != SERVER_MAX_MSG_ID || (v.range.from > till && v.range.from != 0) {
             return None;
         }
-        let ids = v
-            .messages
-            .range((std::ops::Bound::Excluded(till), std::ops::Bound::Unbounded))
-            .copied()
-            .collect::<Vec<_>>();
+        let ids = &v.messages.as_slice()[v.messages.upper_bound(&till)..];
         if ids.len() as i32 > limit {
             return None;
         }
-        Some(ids.into_iter().filter(|id| counts(*id)).count() as i32)
+        Some(ids.iter().filter(|&&id| counts(id)).count() as i32)
     }
     pub fn snapshot(&self, q: &SparseIdsListQuery) -> SparseIdsListResult {
         snapshot(&self.state.current(), q)
@@ -225,14 +221,14 @@ fn snapshot(s: &State, q: &SparseIdsListQuery) -> SparseIdsListResult {
             ..Default::default()
         };
     };
-    let ids = v.messages.iter().copied().collect::<Vec<_>>();
+    let ids = v.messages.as_slice();
     let p = ids.partition_point(|id| *id < q.around_id);
     let before = p.min(q.limit_before as usize);
     let after = (ids.len() - p).min(q.limit_after as usize + 1);
     let selected = ids[p - before..p + after]
         .iter()
         .copied()
-        .collect::<BTreeSet<_>>();
+        .collect::<FlatSet<_>>();
     let mut result = SparseIdsListResult {
         count: s.count,
         skipped_before: (v.range.from == 0).then_some((p - before) as i32),
@@ -245,8 +241,8 @@ fn snapshot(s: &State, q: &SparseIdsListQuery) -> SparseIdsListResult {
             if let Some(a) = result.skipped_after {
                 result.skipped_before = Some(c - a - result.message_ids.len() as i32);
             }
-        } else if let (None,Some(before))=(result.skipped_after,result.skipped_before) {
-            result.skipped_after = Some(c-before-result.message_ids.len() as i32);
+        } else if let (None, Some(before)) = (result.skipped_after, result.skipped_before) {
+            result.skipped_after = Some(c - before - result.message_ids.len() as i32);
         }
     }
     result
