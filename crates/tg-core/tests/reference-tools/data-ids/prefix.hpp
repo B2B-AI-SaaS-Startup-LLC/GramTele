@@ -1,0 +1,9 @@
+#pragma once
+#include "base/basic_types.h"
+#include "base/flat_map.h"
+#include "base/flat_set.h"
+#include "mtproto/core_types.h"
+#include "scheme.h"
+#include <QtCore/QDataStream>
+#include <QtCore/QIODevice>
+#include <iostream>

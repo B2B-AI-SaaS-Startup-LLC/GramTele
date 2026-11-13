@@ -1,0 +1,24 @@
+2026-11-13, Linux x86_64, Rust 1.95.0, GCC 15.3.0, Qt Core 6.11.2.
+Original AyuGramDesktop 0f2a31bb420de98f331990432265b131b8d836b5.
+
+PASS cargo fmt --check
+PASS cargo clippy --workspace --all-targets -- -D warnings
+PASS cargo test --workspace: 651 passed, 0 failed, 3 unchanged ignored (111 suites).
+PASS targeted data_ids: 4 passed, 0 failed.
+PASS tg-core doctests: 4 compile-fail passed.
+
+PASS native_data_ids: 1792 operations, 1236 Peer / 549 Msg / 6 indices / 1 constants.
+Actual unchanged C++ PeerId/MsgId headers and data_peer_id.cpp are compiled.
+Generated Peer and TypeCreator bodies are extracted unchanged; full scheme.h
+is original. No integer substitutes replace the native strong ID types.
+Peer boxed TL input/output and Qt_5_1 BE serialization match exact native bytes.
+Fixture/source/generated hashes: tests/fixtures/data-ids/manifest.json.
+Reproduction: tests/reference-tools/data-ids/README.md.
+
+No live requests, auth attempts, user data or GUI runtime were used.
+Original signed-overflow operations are excluded from native execution;
+the Rust arithmetic explicitly panics instead of inventing wrapping behavior.
+Rust Hash numeric output/iteration and aggregate raw ABI are not wire formats.
+MessageHighlightId/FullReplyTo/SuggestOptions remain deferred, not stubbed.
+
+Logs: /tmp/ayugram-data-ids-{targeted,workspace,native-build}.log.

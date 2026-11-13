@@ -1,0 +1,24 @@
+{
+  "original": "0f2a31bb420de98f331990432265b131b8d836b5",
+  "seed": "0xA71D2026",
+  "commands": 1792,
+  "by_command": {
+    "C": 1,
+    "P": 1236,
+    "M": 549,
+    "I": 6
+  },
+  "source_sha256": {
+    "SourceFiles/data/data_peer_id.h": "b1d2df27cf8f9e921211e37c21c388f6bd1b6a3a23cc02263f69529b6d5ff501",
+    "SourceFiles/data/data_peer_id.cpp": "2c53b903e501f2df91b8db028f38184ccc2b39d3eb9e46f9119056a14208ae67",
+    "SourceFiles/data/data_msg_id.h": "6dfda36c0a01b96743904927a0c0f07ca8c22aa1099f38a254cf120e8836e4fd"
+  },
+  "generated_scheme_sha256": {
+    "scheme.h": "932900f0a199ded47fd232f42ae23d8fbd811040e9f00d824ae365e746eb3dec",
+    "scheme.cpp": "fd675f85cb9c668bc7c11f83758e084251306712931f29b1b8fd01a74ac02e1c"
+  },
+  "fixture_sha256": {
+    "cases.txt": "72a0889a3e95bbe3ab51a1b4d80684dc963a05a5c8fc6963656cfd637223c103",
+    "native.txt": "c086c6fd2aab31f7eb70bbac9b401e624dae6637e5c3f78cb6f5dab12bd3c909"
+  }
+}

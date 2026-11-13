@@ -1271,3 +1271,34 @@ buffering. Остальные Cache/binlog/database/cleaner/compactor — todo.
 Этап 3 полностью не закрыт. Версии зависимостей не обновлялись: tg-cache
 использует уже имеющиеся aes/ctr/nix/tg-base. Cargo.lock меняет только
 зависимости пакета tg-cache.
+
+## 13.11.2026: ID ядра после lang/countries
+
+По просьбе пользователя продолжен независимый блок ядра после области Claude.
+В port/data-ids добавлены data_peer_id и скалярная часть data_msg_id:
+типизированные UserId/ChatId/ChannelId/FakeChatId/PeerId, signed MsgId,
+FullMsgId/FullStoryId/GlobalMsgId и MsgRange, константы и client/story conversions.
+TL Peer и modern/legacy storage serialization сверены с настоящим C++.
+Сохранены marker bit 55, знаковые MTPint conversions, верхние биты и исходный
+fallback peerUser(0); недопустимые значения не канонизируются молча.
+
+PASS Rust 1.95.0: fmt, clippy --workspace --all-targets -D warnings,
+cargo test --workspace — 651 passed, 0 failed, 3 прежних ignored.
+Новых проверок восемь: 4 обычных и 4 compile-fail. Native corpus — 1792 операции
+(1236 Peer, 549 Msg, 6 индексов, 1 таблица констант), включая exact TL/Qt bytes.
+В native используются неизменённые strong ID headers/data_peer_id.cpp и
+извлечённый без правки generated Peer code; целочисленных замен ID нет.
+Полные оригинальные .cpp/.h прочитаны; GUI/Session runtime не запускался.
+
+data_peer_id.cpp/.h — done; data_msg_id.h — partial. MessageHighlightId,
+FullReplyTo и SuggestOptions ждут TextWithEntities/CreditsAmount от Claude,
+заглушек для них нет. Его lang/countries/runtime/Sender/UI/codegen не менялись.
+tg-scheme перенесён из dev в обычные зависимости tg-core; Cargo.lock и версии
+не менялись. Добавлен только экспорт data в корневой lib.rs.
+
+Карта: crates/tg-core/docs/data-ids-map.md; отчёт:
+docs/handoffs/codex-data-ids.md; протокол:
+crates/tg-core/docs/verification/data-ids.txt. Границы параллельной работы
+обновлены в docs/parallel-work.md. Raw storage-list adapters и MTProto packet
+MsgId=u64 остаются прежними: это разные пространства ID. Session/stores и
+полный этап 4 ещё не закрыты, новых живых входов не выполнялось.

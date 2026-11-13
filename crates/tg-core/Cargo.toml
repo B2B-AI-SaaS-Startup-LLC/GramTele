@@ -14,8 +14,8 @@ tg-base = { path = "../tg-base" }
 tg-mtproto = { path = "../tg-mtproto" }
 tg-rpl = { path = "../tg-rpl" }
 tg-runtime = { path = "../tg-runtime" }
+tg-scheme = { path = "../tg-scheme" }
 
 [dev-dependencies]
-tg-scheme = { path = "../tg-scheme" }
 tg-tl = { path = "../tg-tl" }
 tokio = { version = "1", features = ["rt", "macros"] }

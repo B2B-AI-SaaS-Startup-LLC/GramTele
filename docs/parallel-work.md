@@ -8,13 +8,20 @@
 |---|---|---|
 | Claude на другой машине | port/lang-countries от handoff/claude-lang-countries | Незавершённые lang/countries, credits_amount и необходимые им value types tg-ui, MainLocal/runtime, Sender и генератор языка |
 | Codex здесь | port/cache-file-format | tg-cache: storage_encryption, storage_encrypted_file и перенесённые тесты; native-паритет шифрования и файлового формата |
+| Codex: следующий блок ядра | port/data-ids | tg-core/src/data/data_peer_id и скалярная часть data_msg_id: типизированные ID, TL и legacy/modern serialization |
 
 Claude получает [отдельное задание](tasks/claude-lang-countries.md) и WIP-снимок
 прежнего рабочего дерева. WIP не считается проверенным результатом и не вливается
 в main до завершения. Исходное грязное дерево port/core-base сохраняется целиком.
 
-Claude не меняет crates/tg-cache. Codex не меняет lang/countries, tg-ui,
-tg-codegen, tg-runtime, tg-mtproto и корневые модули tg-core в своей реализации.
+Claude не меняет crates/tg-cache и файлы data-ids. Codex не меняет lang/countries,
+credits_amount, tg-ui, tg-codegen, tg-runtime и tg-mtproto.
+После просьбы пользователя продолжить блок после Claude добавлен срез data-ids.
+Для него Codex добавляет только pub mod data в tg-core/src/lib.rs и переносит
+существующую зависимость tg-scheme из dev в обычные зависимости tg-core.
+Изменения экспорта/manifest при интеграции совмещаются с добавлениями Claude.
+MessageHighlightId, FullReplyTo и SuggestOptions отложены до принятия его
+TextWithEntities/CreditsAmount; их заглушек или копий в data-ids нет.
 Тестовые native targets хранятся в соответствующем крейте, поэтому CMake-файлы
 друг друга не затрагиваются. Не обновлять версии общих зависимостей.
 

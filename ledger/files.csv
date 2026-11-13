@@ -804,7 +804,7 @@ SourceFiles/data/data_message_reactions.cpp,2520,tg-core,4,todo
 SourceFiles/data/data_message_reactions.h,462,tg-core,4,todo
 SourceFiles/data/data_messages.cpp,531,tg-core,4,todo
 SourceFiles/data/data_messages.h,243,tg-core,4,todo
-SourceFiles/data/data_msg_id.h,288,tg-core,4,todo
+SourceFiles/data/data_msg_id.h,288,tg-core,4,partial
 SourceFiles/data/data_passkey_deserialize.cpp,121,tg-core,4,todo
 SourceFiles/data/data_passkey_deserialize.h,62,tg-core,4,todo
 SourceFiles/data/data_peer.cpp,2327,tg-core,4,todo
@@ -815,8 +815,8 @@ SourceFiles/data/data_peer_bot_commands.cpp,53,tg-core,4,todo
 SourceFiles/data/data_peer_bot_commands.h,38,tg-core,4,todo
 SourceFiles/data/data_peer_colors.h,23,tg-core,4,todo
 SourceFiles/data/data_peer_common.h,34,tg-core,4,todo
-SourceFiles/data/data_peer_id.cpp,58,tg-core,4,todo
-SourceFiles/data/data_peer_id.h,255,tg-core,4,todo
+SourceFiles/data/data_peer_id.cpp,58,tg-core,4,done
+SourceFiles/data/data_peer_id.h,255,tg-core,4,done
 SourceFiles/data/data_peer_values.cpp,686,tg-core,4,todo
 SourceFiles/data/data_peer_values.h,189,tg-core,4,todo
 SourceFiles/data/data_photo.cpp,627,tg-core,4,todo
