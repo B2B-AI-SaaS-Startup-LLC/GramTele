@@ -23,3 +23,19 @@ storage trace из main сохранён.
 Текущее задание: ../tasks/claude-lang-countries.md.
 Создай port/lang-countries от этой ветки и доведи назначенную область до
 проверенного результата. Не вливай WIP напрямую в main.
+
+## Известные результаты CI снимка f0d36a3
+
+https://github.com/B2B-AI-SaaS-Startup-LLC/GramTele/actions/runs/43383988852
+
+fmt и clippy прошли; cargo test остановился на tg-core --lib: 48 passed,
+2 failed. Это исходные незавершённые тесты WIP, не новые ошибки tg-cache:
+
+- lang::lang_instance::tests::test_languages_replace_every_value,
+  lang_instance.rs:1548: left "________", right "XXXXXXXX";
+- lang::lang_values::tests::reactive_values_follow_the_language_and_the_arguments,
+  lang_values.rs:399: left ["A B", "C B", "Eng", "B, C", "D, C"],
+  right ["A B", "C B", "B, C", "D, C"].
+
+Причина ещё не установлена. Начни с воспроизведения и сверки поведения
+оригинала; не убирай проверки и не отфильтровывай события ради зелёного теста.
