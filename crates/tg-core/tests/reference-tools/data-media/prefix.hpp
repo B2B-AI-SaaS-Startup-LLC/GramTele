@@ -1,0 +1,14 @@
+#pragma once
+#include "base/basic_types.h"
+#include "base/flat_set.h"
+#include "crl/crl_time.h"
+#include <range/v3/all.hpp>
+#include <QtCore/QCoreApplication>
+#include <QtCore/QMimeDatabase>
+#include <QtCore/QVector>
+#include <QtCore/QSize>
+#include <QtCore/QLocale>
+#include <QtCore/QRegularExpression>
+#include <iostream>
+#include <limits>
+#include <cmath>

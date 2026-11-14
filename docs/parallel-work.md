@@ -81,3 +81,19 @@ Claude files и чужие ветки не менялись. Интегриру�
 
 Проверки data-chat-channel: fmt/clippy/test workspace PASS,769 успешных результатов,
 0 failed/3 прежних ignored. Интеграция своей ветки после проверки,без force push.
+
+Пакет04 port/data-media от main0c38855, worktree data-media:
+[handoff](handoffs/codex-data-media.md), [карта](../crates/tg-core/docs/data-media-map.md).
+Реализованы Photos/Documents owner/convert/indices и model/pure phases, byte
+leases, TL, filename/MIME contract, cache queue adapter. Wire PhotoKey/DocumentKey
+остаются lookup selectors; pointers представлены отдельными stable RecordKey,
+без media generation. Это уточнение эскиза stage4-plan после чтения collision
+бodies; reserved docs-only audit file не менялся. Lookup-key и mutable wire id
+могут различаться ровно как C++. Source repeated conversion quirk сохранён.
+307 строк188 done/119 partial/0 pending; native1706,33 targeted tests/clippy PASS.
+Финальные workspace проверки/интеграция выполняются; до фактического PASS
+готовность не подразумевается. Не интегрировать private port/localstorage:
+он у Claude; уже принятый main750204e сохранить. Области Claude и чужие файлы
+не менялись. Известная гонка ObjectAsync::drop остаётся владельцу tg-runtime.
+
+Предварительная полная проверка на базе0c38855: fmt --check PASS, clippy --workspace --all-targets -D warnings PASS, test --workspace PASS (802 успешных результата,0 failed,3 прежних ignored). После совмещения с уже принятым main750204e проверки повторяются.

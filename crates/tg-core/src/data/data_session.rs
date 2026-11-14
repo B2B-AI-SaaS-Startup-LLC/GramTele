@@ -1,5 +1,6 @@
 //! The sole Peers store: common user slice and concrete chat/channel records.
 //! Full Data::Session and UserData remain separate future models.
+pub use super::data_media_store::{Documents, Photos};
 use super::{
     data_changes::{Changes, PeerFlag},
     data_peer::*,
@@ -54,6 +55,19 @@ pub struct Peers {
     effects: EventStream<PeerEffect>,
 }
 impl Peers {
+    /// Model half of PeerData::setUserpicPhoto; no userpic drawing/loading.
+    pub fn set_userpic_photo(&self, photos: &Photos, peer: PeerKey, data: &tg_scheme::Photo) {
+        self.check_scope(peer);
+        assert_eq!(photos.session(), peer.scope());
+        let wire = if matches!(data, tg_scheme::Photo::Photo(_)) {
+            let photo = photos.process_photo(data);
+            photos.edit(photo, |p| p.peer = Some(peer));
+            photos.read(photo, |p| p.wire_key())
+        } else {
+            None
+        };
+        self.update(peer, |p| p.set_userpic_photo_id(wire));
+    }
     pub fn new(scope: &SessionScope, changes: Changes) -> Self {
         assert_eq!(scope.id(), changes.session());
         Self {

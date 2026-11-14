@@ -22,6 +22,7 @@ impl SessionScopeId {
 }
 pub(crate) struct ScopeState {
     next_message: Cell<u64>,
+    next_media: Cell<u64>,
 }
 /// Non-cloneable owner: clearing/replacing a Session creates a NEW scope.
 /// This is a local lifetime token, never an MTProto session_id or wire field.
@@ -44,6 +45,7 @@ impl SessionScope {
             id: SessionScopeId(NonZeroU64::new(id).unwrap()),
             state: Rc::new(ScopeState {
                 next_message: Cell::new(1),
+                next_media: Cell::new(1),
             }),
         }
     }
@@ -63,6 +65,12 @@ impl SessionScope {
     }
     pub fn photo_key(&self, id: PhotoId) -> PhotoKey {
         PhotoKey { scope: self.id, id }
+    }
+    pub(crate) fn new_photo_record_key(&self) -> PhotoRecordKey {
+        PhotoRecordKey::allocate(self.id, &self.state)
+    }
+    pub(crate) fn new_document_record_key(&self) -> DocumentRecordKey {
+        DocumentRecordKey::allocate(self.id, &self.state)
     }
     pub fn story_key(&self, id: FullStoryId) -> StoryKey {
         StoryKey { scope: self.id, id }
@@ -102,7 +110,46 @@ impl PeerKey {
     }
 }
 key!(DocumentKey, DocumentId);
+impl DocumentKey {
+    pub(crate) fn from_scoped_id(scope: SessionScopeId, id: DocumentId) -> Self {
+        Self { scope, id }
+    }
+}
 key!(PhotoKey, PhotoId);
+// Wire lookup keys above are not pointer identities: C++ convert can retain two
+// different objects with the same mutable wire ID. These stable owner handles
+// are never reused within a scope and have no media generation/wire encoding.
+macro_rules! media_record_key {
+    ($name:ident) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name {
+            scope: SessionScopeId,
+            serial: NonZeroU64,
+        }
+        impl $name {
+            pub fn serial(self) -> NonZeroU64 {
+                self.serial
+            }
+            pub(crate) fn allocate(scope: SessionScopeId, state: &ScopeState) -> Self {
+                let n = state.next_media.get();
+                state
+                    .next_media
+                    .set(n.checked_add(1).expect("media identities exhausted"));
+                Self {
+                    scope,
+                    serial: NonZeroU64::new(n).unwrap(),
+                }
+            }
+        }
+        impl ScopedKey for $name {
+            fn scope(&self) -> SessionScopeId {
+                self.scope
+            }
+        }
+    };
+}
+media_record_key!(PhotoRecordKey);
+media_record_key!(DocumentRecordKey);
 impl PhotoKey {
     pub(crate) fn from_scoped_id(scope: SessionScopeId, id: PhotoId) -> Self {
         Self { scope, id }

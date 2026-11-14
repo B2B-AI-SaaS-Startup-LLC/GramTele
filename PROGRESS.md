@@ -1,5 +1,26 @@
 # Прогресс
 
+## port/data-media — модели фото/документов, пакет 04
+
+PhotoData/DocumentData model phases, все attributes, TL metadata apply,
+Photos/Documents stores и convert, FileLocation scalar state, waveform,
+filename/MIME rules, qualities, byte leases и настоящий tg-cache adapter.
+Wire lookup keys сохранены; отдельные stable record keys без media generation
+сохраняют два объекта при collision и исходную повторную перестановку lookup.
+Borrow закрывается до fire; secondary refs/leases стабильны. Peers photo binding
+подключён к Changes. Никаких fake Session/History/loader/pixel моделей.
+
+Карта: crates/tg-core/docs/data-media-map.md —307 строк восьми файлов,
+188 done/119 partial/0 pending; зависимости перечислены отдельно. Native вне
+клона1706 строк (1688 сравнений+18 registry inputs), два identical runs;
+полные классы/Session/TL/attributes — own tests+чтение, probe требует lang_auto.h.
+33 новых targeted tests и clippy PASS; финальные workspace проверки ещё идут.
+Новых зависимостей/manifest/lock изменений нет. Учет ledger partial перечисляет
+UI5/6, storage/file_download3/4, platform MIME/FileLocations33, History18, lang01.
+Подробности, исходные quirks и пределы доказательства:
+docs/handoffs/codex-data-media.md. Чужие localstorage/runtime/Claude files и
+reserved docs-only stage4-plan.md не менялись. Main интеграция после проверок.
+
 ## Этап 0
 
 - Корневой workspace (`crates/*`, resolver 2, общие edition и license, мягкие lints).
@@ -1511,3 +1532,5 @@ GroupEffect::ForceHistoryFullResize, без нулевой flag-mask коман�
 в существующем тесте проверяет known-state до эффекта и отсутствие повторного
 resize. Три проверки всего workspace повторены после уточнения: все PASS,
 769 успешных результатов/0 failed/3 прежних ignored.
+
+Предварительная полная проверка на базе0c38855: fmt --check PASS, clippy --workspace --all-targets -D warnings PASS, test --workspace PASS (802 успешных результата,0 failed,3 прежних ignored). После совмещения с уже принятым main750204e проверки повторяются.
