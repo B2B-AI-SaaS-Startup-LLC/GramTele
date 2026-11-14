@@ -717,11 +717,7 @@ impl Peers {
             d
         });
         if diff {
-            self.emit_group(GroupEffect::HistoryFlagsChanged {
-                peer: k.peer(),
-                diff: 0,
-                which: 0,
-            });
+            self.emit_group(GroupEffect::ForceHistoryFullResize(k.peer()));
             self.group_changed(k.peer(), F::DiscussionLink.into());
         }
     }

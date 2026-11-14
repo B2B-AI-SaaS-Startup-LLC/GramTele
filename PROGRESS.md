@@ -1505,3 +1505,9 @@ clippy --workspace --all-targets -D warnings PASS; test --workspace PASS:
 Дополнительные границы data-chat-channel: signed-overflow края counters/version/
 slowmode (Rust wrapping, C++ UB вне проверенного домена) и Forum detach/retain/
 recreate lifetime08 не подтверждены; owner key не заменяет настоящий lifetime.
+
+Финальное уточнение: discussion-link forceFullResize представлен отдельным
+GroupEffect::ForceHistoryFullResize, без нулевой flag-mask команды. Новый сценарий
+в существующем тесте проверяет known-state до эффекта и отсутствие повторного
+resize. Три проверки всего workspace повторены после уточнения: все PASS,
+769 успешных результатов/0 failed/3 прежних ignored.

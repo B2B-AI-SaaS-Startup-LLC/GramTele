@@ -23,6 +23,7 @@ pub enum GroupEffect {
     CloseChatIfStillNotMember(PeerKey),
     UpdateChatListEntry(PeerKey),
     UpdateChatListEntryPostponed(PeerKey),
+    ForceHistoryFullResize(PeerKey),
     HistoryFlagsChanged {
         peer: PeerKey,
         diff: u64,

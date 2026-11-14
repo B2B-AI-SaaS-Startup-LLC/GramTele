@@ -1115,4 +1115,19 @@ fn photo_stories_location_and_metadata_commands_use_real_record_state() {
     assert!(p.read_chat(chat, |c| c.admins.contains(&me)));
     p.set_channel_available_min_id(k, tg_core::data::data_msg_id::MsgId::new(4));
     assert_eq!(p.read_channel(k, ChannelData::available_min_id).bare, 4);
+    let resizes = Rc::new(Cell::new(0));
+    let out = resizes.clone();
+    let pp = p.clone();
+    p.group_effects().on_next(
+        move |e| {
+            if matches!(e, GroupEffect::ForceHistoryFullResize(_)) {
+                assert!(pp.read_channel(k, ChannelData::discussion_link_known));
+                out.set(out.get() + 1);
+            }
+        },
+        &life,
+    );
+    p.set_channel_discussion_link(k, None);
+    p.set_channel_discussion_link(k, None);
+    assert_eq!(resizes.get(), 1);
 }
