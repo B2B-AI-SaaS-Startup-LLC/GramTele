@@ -68,7 +68,7 @@ owner/file/UI commands возвращают false и обязаны идти с�
 Отдельная CMake цель вне клона `/tmp/ayugram-data-media-native`: неизменённые
 standalone тела оригинала, настоящий MimeType header/QMimeDatabase, QSize,
 полный оригинальный core/file_location.cpp и lib_base algorithm/debug/integration/
-assertion. Два запуска побайтно совпали: **1706 строк =1688 сравнений +18 registry
+assertion. Два запуска побайтно совпали: **1717 строк =1699 сравнений +18 registry
 inputs**. Фикстура/SHA256 и воспроизведение/proof scope находятся в
 crates/tg-core/tests/{fixtures,reference-tools}/data-media.
 
@@ -143,3 +143,12 @@ ObjectAsync::drop оставили Claude; его файлы не менялис
 FileLocation является scalar/model срезом: macOS bookmark state и динамическое
 разрешение bookmark name ещё не реализованы (33), native подтвердил Linux
 non-bookmark случаи. Полную платформенную эквивалентность не заявляем.
+
+Финальная сверка Windows save-name: Platform::FileNameFromUserString использует
+CI comparison (ſ→s), но FileNameForSave после диалога — trimmed().toLower() и
+case-sensitive suffix, поэтому ſ там не превращается в s. Первоначальное
+объединение этих проверок в Rust исправлено; 11 новых native savedmask cases
+исполняют неизменённый чистый блок оригинала, включая Unicode/trailing spaces.
+Это проверка строкового Windows-блока на Qt/Linux, не Windows filesystem proof.
+
+После точного переноса Windows post-dialog lowercasing и расширения native до1717 строк все три проверки workspace повторены: fmt/clippy/test PASS,809 successful,0 failed,3 прежних ignored. Лог /tmp/data-media-final-checks.log.

@@ -68,4 +68,5 @@ int main(int argc, char **argv) {
   const auto text=QString::fromUcs4(&code,1);
   for(char a='a';a<='z';++a) if(text.compare(QString(QChar(a)),Qt::CaseInsensitive)==0) std::cout<<"asciifold,"<<uint32_t(code)<<','<<a<<'\n';
  }
+ for (const auto &name:QStringList{u"x.LNK "_q,u"x.\u017fcf"_q,u"x.ln\u212a"_q,u"x.scf"_q,u"x.exe"_q,QString(),u"x.scf."_q,u"x.lnk\u0085"_q,u"x.lnk\u001c"_q,u"x.lnk\u00a0"_q,u"x.lnk\u202f"_q}) std::cout<<"savedmask,"<<hex(name)<<','<<hex(NativeSavedNameMask(name))<<'\n';
 }

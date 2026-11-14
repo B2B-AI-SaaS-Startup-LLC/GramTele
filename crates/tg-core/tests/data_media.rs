@@ -107,6 +107,10 @@ fn native_pure_functions() {
     for l in include_str!("fixtures/data-media/pure.csv").lines() {
         let a: Vec<_> = l.split(',').collect();
         match a[0] {
+            "savedmask" => assert_eq!(
+                file_name_for_save_platform(&string(a[1]), FilenamePlatform::Windows),
+                string(a[2])
+            ),
             "asciifold" => {
                 let c = char::from_u32(a[1].parse().unwrap()).unwrap().to_string();
                 assert_eq!(qt_ascii_ci_prefix(&c, a[2]), Some(c.len()));
@@ -219,7 +223,7 @@ fn native_pure_functions() {
         }
         rows += 1;
     }
-    assert_eq!(rows, 1688);
+    assert_eq!(rows, 1699);
 }
 #[test]
 fn filename_platform_precedence_and_security() {

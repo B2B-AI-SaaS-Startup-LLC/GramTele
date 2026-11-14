@@ -33,7 +33,7 @@ cmp /tmp/data-media-pure-1.csv /tmp/data-media-pure-2.csv
 ```
 
 Captured environment: Qt 6.11.2, GCC 15.3 x86_64 `-O2`, English QLocale.
-The two outputs match byte for byte: **1706 rows**, **1688 compared cases +18
+The two outputs match byte for byte: **1717 rows**, **1699 compared cases +18
 registry-input rows**. Rust loads those 18 actual registry responses as test
 inputs, independently checks Core's overrides/alias mapping/glob order/filter
 strings against native wrapper output, and compares all other rows directly.
@@ -72,3 +72,9 @@ identity order is not proven equal between Rust and libstdc++.
 The committed source SHA256 manifest covers the original files used by the
 extractor. Each future corpus change must rerun native, compare two outputs and
 review the proof scope; regenerating expected values from Rust is not evidence.
+
+The final 11 savedmask rows execute the unchanged pure Windows block of
+FileNameForSave in an argument-only wrapper. It uses trimmed().toLower(), not CI
+comparison: long s is deliberately NOT folded here, unlike the platform filename
+sanitizer. This corrected a Rust overgeneralization; both distinct behaviors are
+now covered. The wrapper does not simulate the original Session/dialog/filesystem.

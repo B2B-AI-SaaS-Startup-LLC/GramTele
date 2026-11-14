@@ -12,7 +12,7 @@ Borrow закрывается до fire; secondary refs/leases стабильн�
 
 Карта: crates/tg-core/docs/data-media-map.md —307 строк восьми файлов,
 188 done/119 partial/0 pending; зависимости перечислены отдельно. Native вне
-клона1706 строк (1688 сравнений+18 registry inputs), два identical runs;
+клона1717 строк (1699 сравнений+18 registry inputs), два identical runs;
 полные классы/Session/TL/attributes — own tests+чтение, probe требует lang_auto.h.
 33 новых tests; fmt/clippy/test workspace PASS после merge принятого main750204e:
 809 успешных результатов (808+1 child),0 failed,3 прежних ignored.
@@ -1546,3 +1546,5 @@ UpdateChecker — LocalEffect. Темы, фоны, языковые пакеты
 (5/16/01/9). Карта crates/tg-core/docs/localstorage-map.md, 7 тестов.
 Нативной сверки нет (Core::App) — own tests + чтение.
 
+
+После точного переноса Windows post-dialog lowercasing и расширения native до1717 строк все три проверки workspace повторены: fmt/clippy/test PASS,809 successful,0 failed,3 прежних ignored. Лог /tmp/data-media-final-checks.log.

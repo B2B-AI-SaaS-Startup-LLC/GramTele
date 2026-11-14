@@ -89,8 +89,11 @@ impl DocumentData {
     }
 }
 pub fn file_name_for_save_platform(result: &str, platform: FilenamePlatform) -> String {
-    if platform == FilenamePlatform::Windows
-        && (qt_ascii_ci_suffix(result.trim(), ".lnk") || qt_ascii_ci_suffix(result.trim(), ".scf"))
+    // FileNameForSave deliberately uses toLower + case-sensitive endsWith,
+    // unlike Platform::FileNameFromUserString's CI check. In particular ſ
+    // remains ſ here (native savedmask cases), while Kelvin lowercases to k.
+    let lower = result.trim().to_lowercase();
+    if platform == FilenamePlatform::Windows && (lower.ends_with(".lnk") || lower.ends_with(".scf"))
     {
         format!("{result}.download")
     } else {

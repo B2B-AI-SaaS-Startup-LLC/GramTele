@@ -33,6 +33,9 @@ text += function(doc, 'QString JoinStringList(')
 start = doc.index('QString ext = QFileInfo(name).suffix()')
 end = doc.index('\n\t\treturn filedialogGetSaveFile', start)
 text += 'QString NativePromoteFilter(const QString &name, const QString &filter) {\n' + doc[start:end] + '\nreturn fil;\n}\n'
+start = doc.index('const auto lower = result.trimmed().toLower()', doc.index('QString FileNameForSave('))
+end = doc.index('#endif', start)
+text += 'QString NativeSavedNameMask(const QString &result) {\n' + doc[start:end] + '\nreturn result;\n}\n'
 text += 'namespace Platform {\n'
 text += function((root/'lib_base/base/platform/linux/base_file_utilities_linux.cpp').read_text(), 'QString FileNameFromUserString(')
 text += '}\nnamespace base { namespace Platform { using ::Platform::FileNameFromUserString; }\n'
