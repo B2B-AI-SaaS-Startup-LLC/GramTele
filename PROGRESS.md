@@ -1511,3 +1511,13 @@ GroupEffect::ForceHistoryFullResize, без нулевой flag-mask коман�
 в существующем тесте проверяет known-state до эффекта и отсутствие повторного
 resize. Три проверки всего workspace повторены после уточнения: все PASS,
 769 успешных результатов/0 failed/3 прежних ignored.
+
+## 14.11.2026: localstorage — глобальный файл настроек (port/localstorage, Claude)
+
+Local::start/writeSettings/rewriteSettingsIfNeeded/reset, чтение устаревших
+tdata/config, `<data>_config` (dbiEncryptedWithSalt) и `<data>` (dbiEncrypted) с
+рекурсией и OldKey, префикс автообновления (AyuGram закрепляет свой хост) и
+update-manifest. Значения для записи — SettingsSnapshot, вызовы в тему/фон/язык/
+UpdateChecker — LocalEffect. Темы, фоны, языковые пакеты и waveform — partial
+(5/16/01/9). Карта crates/tg-core/docs/localstorage-map.md, 7 тестов.
+Нативной сверки нет (Core::App) — own tests + чтение.
