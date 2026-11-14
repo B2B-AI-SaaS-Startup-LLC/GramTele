@@ -54,3 +54,17 @@ Claude files и Cargo.lock не меняются. Native compile не подме
 media/topics/messages и pointer-order→key-order явно задокументированы как границы
 будущего пакета моделей. Все три проверки PASS: 702 workspace tests + 1 дочерний процессный,
 0 failed / 3 прежних ignored. Интеграция main + port/data-changes без force push.
+
+Срез port/data-peer от main959488b, worktree data-peer:
+[handoff](handoffs/codex-data-peer.md),
+[карта](../crates/tg-core/docs/data-peer-map.md). Общая модель PeerData и Peers
+component только в tg-core, без fake subtype records. Concrete User/Chat/Channel
+и owned enum — 02/03; UI5/6, full owners29 и Unicode text backend5 остаются partial.
+357 строк карты (300 done/57 partial), native 4247 строк, 31 новых tests.
+Cargo manifests/lock и области Claude не менялись.
+
+По указанию пользователя параллельные Codex worktrees port/tdata-settings
+(storage settings scheme/localstorage), port/base-linux (lib_base/platform/linux)
+и docs-only stage4 audit зарезервированы за другими агентами. В data-peer их файлы
+не меняются, ветки не интегрируются. Их интеграция в main — только отдельным
+следующим заданием пользователя. Текущая интеграция касается только port/data-peer.

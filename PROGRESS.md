@@ -231,7 +231,7 @@ base-runtime/codegen не изменялись. Cargo.lock не добавлял
   Неподвижные тестовые снимки ресурсов с SHA256 и scale variants хранятся в
   tests/fixtures/Telegram; .gitattributes запрещает их newline conversion.
 - Новая direct dependency: tg-base=0.0.0 (готовый CRC32); dev dependency:
-  serde_json="1" (при проверке 1.0.154, эталоны). Qt-compatible JSON reader
+  serde_json="1" (при проверке 1.0.157, эталоны). Qt-compatible JSON reader
   сохраняет UTF-16, lone surrogates, порядок QString, unknown escapes и глубину
   1024; безопасная рекурсия работает в parser thread со stack 16 МиБ.
   Новые SVG/PNG/WebP крейты не выбирались. tg-ui/tg-core/tg-runtime/tg-rpl не менялись;
@@ -486,7 +486,7 @@ codegen_scheme.py, скомпилирована вместе с lib_tl вне к
 (1697 constructors, 823 methods) и встроенный полиморфный vector: 15 123
 C++ образца. Расхождений нет: Rust write совпадает с C++, deserialize_exact
 и повторная запись сохраняют байты. Шесть режимов покрывают absent/present,
-flags2, длины 0/253/254/3/1, empty/nonempty vector, boxed/bare; для `!X`
+flags2, длины 0/300/254/3/1, empty/nonempty vector, boxed/bare; для `!X`
 использован help.getConfig. Это не полный перебор combinations всех флагов
 и вложенных alternatives. Полиморфные встроенные числовые/string примитивы
 покрыты в составе полей; UTF-8 и семантическая допустимость данных на сервере
@@ -1377,3 +1377,51 @@ clippy --workspace --all-targets -D warnings PASS; test --workspace PASS:
 702 workspace tests + 1 дочерний процессный = 703 успешных результата,
 0 failed, 3 прежних ignored. Карта/manifest SHA256 PASS. Полный handoff обновлён
 до коммита; интеграция fast-forward в main и пуш обеих ссылок без force.
+
+### Этап 4: PeerData common model (port/data-peer)
+
+Base main959488b, отдельный worktree data-peer. В tg-core перенесены общие
+поля/мутации PeerData, флаги/предикаты/ограничения, именование с NameUpdate/Changes,
+username delegation, barSettings/notify, TTL/full/loaded/block, цвета/emoji IDs,
+photo/ImageLocation metadata, stories/slowmode/stars/boost projections, migration/
+forum/monoforum/group-call keys, pinned helpers над существующим SharedMedia.
+Mutable borrow завершается перед fire. External API/UI/storage actions —
+упорядоченные typed effects без фиктивных сервисов. Peers — только компонент
+будущей Session с ensure/loaded; owned User/Chat/Channel enum отложен до 02/03,
+вместо пустых subtype records используются borrowed реальные поля/методы.
+
+Полностью закрыты 7 файлов: data_flags.h, data_peer_common.h,
+data_lastseen_status.h, data_user_names.h/.cpp, notify/data_peer_notify_settings.h/.cpp.
+17 partial: data_peer.h/.cpp (UI5/6, owners29, MTPphoto03/emoji07/reactions09,
+FileOrigin/wallpaper16), data_birthday.h/.cpp (BirthdayText01/5), user/chat/channel.h
+(модели02/03), participant_status.h (оставшиеся методы03), data_types.h (остаток16),
+emoji_statuses.h (service07), session.h/.cpp (остаток13/14), group_call.h (модель08),
+image_location.h/.cpp (loader/serialize/cache/UI5), core/utils.h/.cpp (остаток34/5).
+Группы partial — пофункционно в crates/tg-core/docs/data-peer-map.md и пофайлово в
+handoff. Общий image metadata слой в tg-core, tg-ui/Claude не менялся. Production
+Unicode RemoveAccents/PrepareSearchWords binding остаётся обязательной зависимостью
+5 без default backend; labels lang01 не заимствованы. ChatData Zalgo filter/settings03
+не подменён: common set_name принимает уже фильтрованную строку.
+
+Карта: 357 строк = 300 done + 57 partial с указанными будущими пакетами;
+0 пустых реализаций/тестовых ссылок. 31 новых tests, 0 новых ignored, без sleep.
+Native CMake вне клона, GCC15.3/x86_64 O2 Qt6.11.2: настоящие pure source bodies,
+flags/Lastseen/Birthday/Usernames/ImageLocation/Qt text helpers и MTP color/profile.
+4247 строк, два запуска побайтно одинаковы; Rust fixture comparison PASS.
+Полный data_peer.cpp syntax probe упирается в generated lang_auto.h, дальнейшие
+UI/styles/owners не заменялись: Session state/наследуемые predicates/amRestricted/
+Changes effect order — own tests + чтение, не настоящий C++ Session replay.
+
+Сохранены исходные особенности BirthdayAge 29Feb в невисокосном году,
+Lastseen promotions/strict validation, editable append index=0, u16 nameVersion
+wrap, slowmode producer без Creator/duplicate false, Ayu user allowsForwarding=true,
+UnavailableReason constant bodies, pointer identity Emoji collectible и
+ImageLocation equality без dimensions/hash/reference. Stale editable index:
+Rust panic вместо C++ UB; signed-overflow края зафиксированы wrapping по GCC O2,
+прочие C++ архитектуры/компиляторы не доказаны. UTF-8 имена не выражают lone
+surrogate QString. Media ID remap/collision gate03/16 не обходился.
+Новых Rust зависимостей/версий/изменений Cargo.lock нет. Соседние ветки
+port/tdata-settings, port/base-linux и docs-only stage4 audit не менялись и не вливались.
+Полный учёт: docs/handoffs/codex-data-peer.md.
+
+DATA_PEER_CHECK_PENDING

@@ -96,8 +96,18 @@ macro_rules! key {
     };
 }
 key!(PeerKey, PeerId);
+impl PeerKey {
+    pub(crate) fn from_scoped_id(scope: SessionScopeId, id: PeerId) -> Self {
+        Self { scope, id }
+    }
+}
 key!(DocumentKey, DocumentId);
 key!(PhotoKey, PhotoId);
+impl PhotoKey {
+    pub(crate) fn from_scoped_id(scope: SessionScopeId, id: PhotoId) -> Self {
+        Self { scope, id }
+    }
+}
 key!(StoryKey, FullStoryId);
 key!(FolderKey, FolderId);
 macro_rules! view {
@@ -243,5 +253,13 @@ impl ScopedKey for EntryKey {
             Self::ForumTopic(k) => k.scope(),
             Self::SavedSublist(k) => k.scope(),
         }
+    }
+}
+
+// data_group_call.h: immutable CallId, scoped to its owning Data::Session.
+key!(GroupCallKey, u64);
+impl SessionScope {
+    pub fn group_call_key(&self, id: u64) -> GroupCallKey {
+        GroupCallKey { scope: self.id, id }
     }
 }
