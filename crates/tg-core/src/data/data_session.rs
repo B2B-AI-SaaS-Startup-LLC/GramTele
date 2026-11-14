@@ -1,5 +1,5 @@
-//! The Peers common-field store belonging to Data::Session. Full Session and
-//! User/Chat/Channel record enum are deliberately absent until their real models.
+//! The sole Peers store: common user slice and concrete chat/channel records.
+//! Full Data::Session and UserData remain separate future models.
 use super::{
     data_changes::{Changes, PeerFlag},
     data_peer::*,
@@ -48,7 +48,8 @@ pub enum NameFields<'a> {
 pub struct Peers {
     scope: SessionScopeId,
     alive: Weak<ScopeState>,
-    peers: RefCell<BTreeMap<PeerId, PeerData>>,
+    pub(crate) peers: RefCell<BTreeMap<PeerId, PeerRecord>>,
+    pub(crate) group_effects: std::rc::Rc<EventStream<super::data_group_model::GroupEffect>>,
     changes: Changes,
     effects: EventStream<PeerEffect>,
 }
@@ -59,21 +60,31 @@ impl Peers {
             scope: scope.id(),
             alive: scope.downgrade(),
             peers: RefCell::default(),
+            group_effects: std::rc::Rc::new(EventStream::new()),
             changes,
             effects: EventStream::new(),
         }
     }
-    fn check_scope(&self, key: PeerKey) {
+    pub(crate) fn check_scope(&self, key: PeerKey) {
         assert!(self.alive.upgrade().is_some(), "SessionScope has ended");
         assert_eq!(key.scope(), self.scope, "foreign SessionScope key");
     }
     pub fn ensure_peer(&self, id: PeerId) -> PeerKey {
         assert!(self.alive.upgrade().is_some(), "SessionScope has ended");
         let key = PeerKey::from_scoped_id(self.scope, id);
-        self.peers
-            .borrow_mut()
-            .entry(id)
-            .or_insert_with(|| PeerData::from_scope(self.scope, self.alive.clone(), key));
+        self.peers.borrow_mut().entry(id).or_insert_with(|| {
+            let p = PeerData::from_scope(self.scope, self.alive.clone(), key);
+            if peer_is_chat(id) {
+                PeerRecord::Chat(Box::new(super::data_chat::ChatData::new(
+                    p,
+                    self.group_effects.clone(),
+                )))
+            } else if peer_is_channel(id) {
+                PeerRecord::Channel(Box::new(super::data_channel::ChannelData::new(p)))
+            } else {
+                PeerRecord::UserBase(Box::new(p))
+            }
+        });
         key
     }
     pub fn peer_loaded(&self, id: PeerId) -> Option<PeerKey> {
@@ -81,13 +92,13 @@ impl Peers {
         self.peers
             .borrow()
             .get(&id)
-            .filter(|p| p.is_loaded())
-            .map(PeerData::key)
+            .filter(|p| p.peer().is_loaded())
+            .map(|p| p.peer().key())
     }
     pub fn read<R>(&self, key: PeerKey, read: impl FnOnce(&PeerData) -> R) -> R {
         self.check_scope(key);
         let peers = self.peers.borrow();
-        read(peers.get(&key.id()).expect("peer not ensured"))
+        read(peers.get(&key.id()).expect("peer not ensured").peer())
     }
     pub fn update<R>(
         &self,
@@ -97,7 +108,12 @@ impl Peers {
         self.check_scope(key);
         let mutation = {
             let mut peers = self.peers.borrow_mut();
-            write(peers.get_mut(&key.id()).expect("peer not ensured"))
+            write(
+                peers
+                    .get_mut(&key.id())
+                    .expect("peer not ensured")
+                    .peer_mut(),
+            )
         };
         self.dispatch(mutation.effects);
         mutation.value
@@ -110,6 +126,25 @@ impl Peers {
             match effect {
                 PeerEffect::Updated(key, flags) => self.changes.peer_updated(key, flags),
                 PeerEffect::NameUpdated(key, letters) => self.changes.name_updated(key, letters),
+                PeerEffect::SetStoriesState { peer, state } if peer_is_channel(peer.id()) => {
+                    self.set_channel_stories_state(ChannelKey::try_from(peer).unwrap(), state)
+                }
+                PeerEffect::SetStoriesHidden { peer, hidden } if peer_is_channel(peer.id()) => {
+                    let key = ChannelKey::try_from(peer).unwrap();
+                    if hidden {
+                        self.add_channel_flags(
+                            key,
+                            super::data_channel::ChannelDataFlag::StoriesHidden.into(),
+                        );
+                    } else {
+                        self.remove_channel_flags(
+                            key,
+                            super::data_channel::ChannelDataFlag::StoriesHidden.into(),
+                        );
+                    }
+                }
+                PeerEffect::CheckPremiumUnknownPhoto { peer, .. }
+                    if peer_is_channel(peer.id()) || peer_is_chat(peer.id()) => {}
                 effect => self.effects.fire(effect),
             }
         }
@@ -275,6 +310,7 @@ impl Peers {
             peers
                 .get_mut(&key.id())
                 .expect("peer not ensured")
+                .peer_mut()
                 .set_userpic_checked(photo_id, location, has_video)
                 .effects
         };
@@ -383,5 +419,29 @@ impl Peers {
         self.check_scope(monoforum);
         let sublist_peer = self.ensure_peer(sublist_id);
         lookup(monoforum, sublist_peer)
+    }
+}
+
+/// Concrete group records plus the already accepted user common slice. UserData
+/// itself is package02; UserBase does not pretend to be a complete UserData.
+pub(crate) enum PeerRecord {
+    UserBase(Box<PeerData>),
+    Chat(Box<super::data_chat::ChatData>),
+    Channel(Box<super::data_channel::ChannelData>),
+}
+impl PeerRecord {
+    pub(crate) fn peer(&self) -> &PeerData {
+        match self {
+            Self::UserBase(p) => p,
+            Self::Chat(c) => &c.peer,
+            Self::Channel(c) => &c.peer,
+        }
+    }
+    pub(crate) fn peer_mut(&mut self) -> &mut PeerData {
+        match self {
+            Self::UserBase(p) => p,
+            Self::Chat(c) => &mut c.peer,
+            Self::Channel(c) => &mut c.peer,
+        }
     }
 }

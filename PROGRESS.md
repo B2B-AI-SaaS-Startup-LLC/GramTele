@@ -1439,3 +1439,69 @@ UpdateChecker и SessionSettings — упорядоченные эффекты �
 Карта crates/tg-core/docs/settings-scheme-map.md, 16 тестов. Нативной сверки нет:
 ReadSetting не собрать без Core::App — own tests + чтение. localstorage.cpp не начат.
 Новая внутренняя зависимость tg-core → tg-cache (maxDataSize).
+
+### Этап 4: группы/каналы, пакет 03 (port/data-chat-channel)
+
+Base main1038c32 (data-peer9b7013a и принятый tdata-settings). Отдельный worktree
+ayugram-rs-wt/data-chat-channel. Полностью прочитаны 8 файлов4299LOC задания.
+Перенесены ChatData/ChannelData fields и predicates поверх одного PeerData,
+коллекции участников/админов/ботов на scoped keys, права/ограничения и TL conversions,
+name/username с Ayu filterZalgo, migration/slowmode/boosts/forum/monoforum flags,
+applyEditAdmin/applyEditBanned, admin/rank batches и все ApplyChat/Channel/CommunityUpdate
+model phases. Peers — единственный владелец records; UserBase — прежний общий срез,
+не fake UserData (UserData02 ещё нет). Mutable borrow закрывается до Flags/Changes
+fire, constructor CallNotEmpty subscription сохраняет порядок относительно клиентов.
+Внешние History/API/UI/Session действия — typed GroupEffect, без no-op apply.
+
+Два основных файла done: data_channel_admins.h/.cpp (scoped finish возвращает
+notification, owner испускает его после borrow). Шесть основных partial:
+data_chat.h/.cpp, data_channel.h/.cpp и data_chat_participant_status.h/.cpp.
+Остаток: GroupCall08 только key/команды; Forum08/SavedMessages12/Community07 owners;
+PtsWaiter12 без fake sequence; photo03-media/04, notify/wallpaper16, History18,
+API23/29; UI5/6/lang01. Body model phases имеются, handlers внешних эффектов и
+полный Session replay не объявлены реализованными. Error values SendError перенесены,
+локализованные RestrictionError и PreparedFile/List/Toast остаются 01/5/6.
+
+Вспомогательные BotCommand и ChatBotCommands .h/.cpp done (4 файла).
+ReactionId .h/.cpp partial09 (value/TL/equality/UTF16 ordering есть, query/entity helpers
+ещё09); LocationPoint .h/.cpp partial09/5 (только metadata/fromGeo/equality);
+telegram_helpers.h/.cpp partial35 (только исходный filterZalgo в headless tg-core,
+полный ledger target ayu-core сохранён); Peer/Session/Types headers остаются partial
+по остаткам предыдущих пакетов. Полный пофайловый учёт — в handoff.
+Новых Rust зависимостей/версий/изменений Cargo.toml/Cargo.lock нет.
+
+Карта crates/tg-core/docs/data-chat-channel-map.md: 337 строк,
+287 done +50 partial с будущими пакетами,0 пустых реализаций/тестовых ссылок.
+19 новых tests, без sleep/новых ignored. Native standalone CMake вне оригинала:
+GCC15.3 x86_64 O2 Qt6.11.2, реальные rights source bodies/send unions,
+неизменённая pure normalization фаза ChannelData::setFlags, IsRestrictedForever,
+исходный filterZalgo. 481 строка побайтно совпала в двух native запусках;
+Rust fixture comparison, manifest и literal365 Mn ranges PASS. Frozen Mn таблица
+получена Qt/PCRE для всех Unicode scalar values, не по combining-block приближению.
+Full class/Session/canX state — own tests + чтение; syntax probe data_channel.cpp
+требует tl/expected.hpp, прошлый data-peer probe также упирался в lang_auto.h/UI.
+Это граница текущей сборки, не доказательство невозможности будущей headless Qt цели.
+
+Сохранены исходные quirks: двойное изменение adminsCount; emplace оставляет старые
+self admin/restriction entries; admin remove не убирает rank; self-only History batch
+подавляется; null monoforum link сохраняет прежний key, меняя disabled; Skipped version
+не присваивается, но full participants snapshot продолжает обработку; invalidate не
+чистит ranks/default bans/lastAuthors/markupSenders; boosts fire только при смене
+unrestricted и перед Rights|Slowmode; stories используют Flags напрямую; ChannelFull
+mask сохраняет HasStarsPerMessage при stars→0; ReactionId Custom(0) теряет variant при
+TL conversion. Старший realtime shift Changes не менялся. Explicit finish batch вместо
+C++ RAII действует в production owner paths; arbitrary unfinished drop/panic unwind не
+эквивалентен. Native Unicode/QString lone surrogates и настоящие service handlers не
+доказаны. Pointer-order/key-order и media remap gates не обходились.
+Области Claude и параллельные base-linux/stage4-audit не менялись и не интегрировались.
+
+Проверки port/data-chat-channel через nix develop: fmt --check PASS;
+clippy --workspace --all-targets -D warnings PASS; test --workspace PASS:
+768 основных tests +1 child-process =769 успешных результатов,0 failed,
+3 прежних ignored. Native/map/manifest/Mn и git diff --check PASS.
+Учёт/handoff обновлены до коммита; интеграция только своей ветки, push main+ветки
+в gramtele без force. Указанная пользователем tg-runtime race здесь не воспроизвелась.
+
+Дополнительные границы data-chat-channel: signed-overflow края counters/version/
+slowmode (Rust wrapping, C++ UB вне проверенного домена) и Forum detach/retain/
+recreate lifetime08 не подтверждены; owner key не заменяет настоящий lifetime.

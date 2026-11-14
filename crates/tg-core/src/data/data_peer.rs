@@ -1850,3 +1850,54 @@ impl PeerData {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum AllowedReactionsType {
+    All,
+    Default,
+    #[default]
+    Some,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AllowedReactions {
+    pub some: Vec<super::data_message_reaction_id::ReactionId>,
+    pub max_count: i32,
+    pub kind: AllowedReactionsType,
+    pub paid_enabled: bool,
+}
+impl AllowedReactions {
+    pub fn enabled(&self) -> bool {
+        self.kind != AllowedReactionsType::Some || !self.some.is_empty() || self.paid_enabled
+    }
+}
+pub fn parse_allowed_reactions(
+    value: &tg_scheme::ChatReactions,
+    max_count: i32,
+    paid_enabled: bool,
+) -> AllowedReactions {
+    use tg_scheme::ChatReactions::*;
+    let mut r = AllowedReactions {
+        max_count,
+        paid_enabled,
+        ..Default::default()
+    };
+    match value {
+        ChatReactionsNone(_) => {}
+        ChatReactionsAll(d) => {
+            r.kind = if d.is_allow_custom() {
+                AllowedReactionsType::All
+            } else {
+                AllowedReactionsType::Default
+            }
+        }
+        ChatReactionsSome(d) => {
+            r.some = d
+                .reactions
+                .iter()
+                .map(super::data_message_reaction_id::reaction_from_mtp)
+                .collect()
+        }
+    };
+    r
+}

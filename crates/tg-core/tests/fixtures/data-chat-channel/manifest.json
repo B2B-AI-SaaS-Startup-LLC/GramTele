@@ -1,0 +1,33 @@
+{
+  "original_revision": "0f2a31bb420de98f331990432265b131b8d836b5",
+  "toolchain": "GCC 15.3.0, Linux x86_64, -O2, Qt Core 6.11.2, C++23",
+  "scope": "rights conversions, send unions, original normalization prelude, forever predicate, Qt Zalgo only; full models/Session are own tests + reading",
+  "unicode": "Mn property captured from Qt QRegularExpression/PCRE, every scalar 0..10FFFF",
+  "rows": 481,
+  "kinds": {
+    "forever": 5,
+    "mn": 365,
+    "normalize": 67,
+    "rights": 37,
+    "send": 1,
+    "zalgo": 6
+  },
+  "sha256": "33e4227798703e85f4dd118d602c6ca97f7ba6498d7d8b14d7ad774c2d4c16ea",
+  "sources_sha256": {
+    "SourceFiles/data/data_chat.h": "7ea29905f02dfc5200ec31c09f6fdcf58a76091da9a0e2c14dc28f6b4aae79a5",
+    "SourceFiles/data/data_chat.cpp": "20613da9994bfed17b9ee357dba1127955acb927bb14e8ee05c6154bc6166ead",
+    "SourceFiles/data/data_channel.h": "c9c1d0c4283ef0876b2b94f7bb33b27129a1d9218430c5442afe2e21aa32bf2a",
+    "SourceFiles/data/data_channel.cpp": "0ac9a72a34066fa6541c1ecffd0cde637a31ce35cc72a54bc482f59dec263086",
+    "SourceFiles/data/data_channel_admins.h": "05739a953aa3eef846292ed317718c6f09c14ed18e282bb21384abce93d96505",
+    "SourceFiles/data/data_channel_admins.cpp": "f6b30534c4c0c206ca8cfa5076b2cb9bf9c3d7a14d18051968249173dd1d9f42",
+    "SourceFiles/data/data_chat_participant_status.h": "165bbf90a8e7c8be32d85a9fae10dc750d15791d6c7a1eec68e2714361c156f5",
+    "SourceFiles/data/data_chat_participant_status.cpp": "81128b2e908073d2cc1dd4a73eebfeafc687fdf996d7ba18d92df44c397604cf",
+    "SourceFiles/ayu/utils/telegram_helpers.cpp": "1d0ee819166a3e456328f5163c246c91278b3b6008996d3cfbac4edf13d1a472",
+    "lib_base/base/flags.h": "257c660d5e51ef2f254a562d37688b420e4720c2c6b03dfdde81349bb37aeb68",
+    "lib_tl/tl/tl_basic_types.cpp": "87e4498e7db4b5889fbe6f65217f79c0eb5bcf9033417da5f0c84c4a714dd177"
+  },
+  "generated_sha256": {
+    "scheme.h": "932900f0a199ded47fd232f42ae23d8fbd811040e9f00d824ae365e746eb3dec",
+    "scheme.cpp": "fd675f85cb9c668bc7c11f83758e084251306712931f29b1b8fd01a74ac02e1c"
+  }
+}

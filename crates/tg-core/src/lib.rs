@@ -5,4 +5,5 @@ pub mod data;
 pub mod main;
 pub mod storage;
 
+pub mod ayu;
 pub mod core;

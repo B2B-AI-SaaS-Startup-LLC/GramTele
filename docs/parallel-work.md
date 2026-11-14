@@ -68,3 +68,16 @@ Cargo manifests/lock и области Claude не менялись.
 и docs-only stage4 audit зарезервированы за другими агентами. В data-peer их файлы
 не меняются, ветки не интегрируются. Их интеграция в main — только отдельным
 следующим заданием пользователя. Текущая интеграция касается только port/data-peer.
+
+Пакет03 port/data-chat-channel от main1038c32, worktree data-chat-channel:
+[handoff](handoffs/codex-data-chat-channel.md),
+[карта](../crates/tg-core/docs/data-chat-channel-map.md). Concrete Chat/Channel,
+sole Peers owner и released-borrow phases, rights/participants/TL scalar updates.
+337 строк карты (287 done/50 partial), native481 строк,19 новых tests.
+Полные UserData02/Session13/14/29/History18 и внешний UI/API apply не подменяются.
+Native pure proof отделён от own tests+чтение полного состояния. Cargo manifests/lock,
+Claude files и чужие ветки не менялись. Интегрируется только port/data-chat-channel.
+Сообщённую пользователем гонку ObjectAsync::drop не чинить: tg-runtime у Claude.
+
+Проверки data-chat-channel: fmt/clippy/test workspace PASS,769 успешных результатов,
+0 failed/3 прежних ignored. Интеграция своей ветки после проверки,без force push.

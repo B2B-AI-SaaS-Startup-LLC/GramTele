@@ -27,3 +27,16 @@ impl PartialEq for EmojiStatusId {
 impl Eq for EmojiStatusId {}
 
 pub type CallId = u64;
+
+/// data_types.h:244; value contract only, independent of sticker-set owners.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StickerSetIdentifier {
+    pub id: u64,
+    pub access_hash: u64,
+    pub short_name: String,
+}
+impl StickerSetIdentifier {
+    pub fn empty(&self) -> bool {
+        self.id == 0 && self.short_name.is_empty()
+    }
+}

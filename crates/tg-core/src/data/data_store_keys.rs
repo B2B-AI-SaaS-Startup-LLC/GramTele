@@ -263,3 +263,8 @@ impl SessionScope {
         GroupCallKey { scope: self.id, id }
     }
 }
+impl GroupCallKey {
+    pub(crate) fn from_scoped_id(scope: SessionScopeId, id: u64) -> Self {
+        Self { scope, id }
+    }
+}
