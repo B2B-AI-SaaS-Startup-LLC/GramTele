@@ -1337,3 +1337,43 @@ tg-cache: 40 тестов, +27 к предыдущим 13, новых ignored н
 Новых Rust-пакетов/версий нет: добавлены workspace tg-runtime/tg-rpl и feature
 resource у прежнего nix для RLIMIT_FSIZE. Интеграция — main и ветка в gramtele,
 без force push; подробный поимённый учёт 24 файлов — в handoff.
+
+### Этап 4: контракты хранилищ + Data::Changes (port/data-changes)
+
+Основание main be0473f, собственный worktree data-changes. Закрыты
+SourceFiles/data/data_changes.h/.cpp (483+394 LOC): все flags/update payloads,
+Manager, realtime/postponed/dropScheduled, filters/flagsValue, removed,
+порядок категорий и реентерабельные callbacks. MainQueue из tg-runtime и
+EventStream из tg-rpl используются без правок области Claude. Mutable borrow
+pending закрывается до fire; старое queued задание после ручного flush не отменяется.
+
+SessionScope — локальный токен жизни, PeerKey(scope,PeerId),
+MessageKey(scope,FullMsgId,generation), DocumentKey/PhotoKey(scope,id), typed views,
+Topic/Sublist/Story/Entry keys из настоящих заголовков. Generation только messages;
+identity index не подменяет реальные records. Destroyed испускается до invalidation.
+Частично переведены два вспомогательных заголовка: ChatAdminRight/ChatAdminRights
+из data_chat_participant_status.h (остальное пакет03), FolderId/PhotoId/DocumentId
+из data_types.h (остальное пакет16). data_session.h и Peer/History не объявлены готовыми.
+
+Карта crates/tg-core/docs/data-changes-map.md: 136 строк, 0 без теста, 0 partial
+строк, все 59 функций Changes/Manager/CountBit/NameUpdate ctor. 25 новых tests.
+Native — настоящий data_changes.cpp, 7 Managers и Changes ctor/flush:
+GCC15.3/x86_64 O0/O2, три CSV/600 строк совпали и воспроизводятся Rust.
+Полный Main::Session lifecycle/guard/scheduler: own tests + чтение до пакета29.
+Новые Rust зависимости/версии/изменения lock отсутствуют.
+
+Сохранена измеренная ошибка оригинала: 1U<<i оборачивается по 32, high-only
+Peer bits32..57 не доставляются realtime, low0..25 также запускают high streams;
+payload/postponed остаются 64-битными. Для других C++ компиляторов UB не проверено.
+Явное отличие: внутри категории C++ сортирует по pointer address, Rust по typed key;
+native использует заранее упорядоченные синтетические identity tokens.
+Моделям03/04/13/14 предстоит решить media ID conversion/collision (два разных
+объекта могут иметь один ID), 08/12 — topic root remap и lifetime tuple reuse,
+13/14/18..20 — remap сообщений и всех secondary indices. Обходных fake-моделей нет.
+Подробности и границы — docs/handoffs/codex-data-changes.md.
+
+Проверки port/data-changes (Rust1.95.0/nix develop): fmt --check PASS;
+clippy --workspace --all-targets -D warnings PASS; test --workspace PASS:
+702 workspace tests + 1 дочерний процессный = 703 успешных результата,
+0 failed, 3 прежних ignored. Карта/manifest SHA256 PASS. Полный handoff обновлён
+до коммита; интеграция fast-forward в main и пуш обеих ссылок без force.

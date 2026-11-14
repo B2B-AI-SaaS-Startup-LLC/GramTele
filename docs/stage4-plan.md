@@ -230,8 +230,11 @@ include/identifier inventory, **не семантический аудит те�
 
 1. Где закрепить ранние value-типы text entities: в существующем tg-ui без renderer,
    или разрешить отдельный общий крейт? В tg-core их дублировать не предлагается.
-2. Согласуется ли scope+generation для удаляемых записей с желаемым публичным API,
-   или поколения нужны также неизменяемым peers/media? Wire IDs в формате не меняются.
+2. **Решено пользователем:** generation только у удаляемых сообщений; peers/media
+   используют scope+wire ID без generation. Реализованы контракты в port/data-changes.
+   Найденные media ID collisions/remap и отличие pointer order от typed-key order
+   перечислены как design gates будущих моделей в
+   [карте Changes](../crates/tg-core/docs/data-changes-map.md); обходных alias-моделей нет.
 3. Если реальный C++ Core не удастся связать по частям, допустима ли минимальная
    Qt/offscreen цель с реальными owners для replay, либо отложить полный oracle до 6?
 4. Предварительные пакеты ниже требуют чтения тел. Нужен отдельный срез семантического

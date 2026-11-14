@@ -1,0 +1,15 @@
+#pragma once
+#include "base/basic_types.h"
+#include "base/flat_map.h"
+#include "base/flat_set.h"
+#include "base/weak_ptr.h"
+#include "mtproto/core_types.h"
+#include "scheme.h"
+#include "data/data_peer_id.h"
+#include "data/data_msg_id.h"
+#include "rpl/rpl.h"
+#include "crl/crl.h"
+#include <QtCore/QString>
+#include <iostream>
+class QImage;
+struct TextWithEntities;

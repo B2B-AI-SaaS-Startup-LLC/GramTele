@@ -733,8 +733,8 @@ SourceFiles/data/data_birthday.h,47,tg-core,4,todo
 SourceFiles/data/data_boosts.h,73,tg-core,4,todo
 SourceFiles/data/data_bot_app.cpp,13,tg-core,4,todo
 SourceFiles/data/data_bot_app.h,27,tg-core,4,todo
-SourceFiles/data/data_changes.cpp,394,tg-core,4,todo
-SourceFiles/data/data_changes.h,483,tg-core,4,todo
+SourceFiles/data/data_changes.cpp,394,tg-core,4,done
+SourceFiles/data/data_changes.h,483,tg-core,4,done
 SourceFiles/data/data_channel.cpp,1630,tg-core,4,todo
 SourceFiles/data/data_channel.h,680,tg-core,4,todo
 SourceFiles/data/data_channel_admins.cpp,112,tg-core,4,todo
@@ -745,7 +745,7 @@ SourceFiles/data/data_chat.h,240,tg-core,4,todo
 SourceFiles/data/data_chat_filters.cpp,1213,tg-core,4,todo
 SourceFiles/data/data_chat_filters.h,277,tg-core,4,todo
 SourceFiles/data/data_chat_participant_status.cpp,654,tg-core,4,todo
-SourceFiles/data/data_chat_participant_status.h,287,tg-core,4,todo
+SourceFiles/data/data_chat_participant_status.h,287,tg-core,4,partial
 SourceFiles/data/data_cloud_file.cpp,379,tg-core,4,todo
 SourceFiles/data/data_cloud_file.h,119,tg-core,4,todo
 SourceFiles/data/data_cloud_themes.cpp,896,tg-core,4,todo
@@ -875,7 +875,7 @@ SourceFiles/data/data_thread.h,151,tg-core,4,todo
 SourceFiles/data/data_todo_list.cpp,223,tg-core,4,todo
 SourceFiles/data/data_todo_list.h,80,tg-core,4,todo
 SourceFiles/data/data_types.cpp,166,tg-core,4,todo
-SourceFiles/data/data_types.h,418,tg-core,4,todo
+SourceFiles/data/data_types.h,418,tg-core,4,partial
 SourceFiles/data/data_unread_value.cpp,68,tg-core,4,todo
 SourceFiles/data/data_unread_value.h,30,tg-core,4,todo
 SourceFiles/data/data_user.cpp,1140,tg-core,4,todo

@@ -1,0 +1,34 @@
+{
+  "revision": "0f2a31bb420de98f331990432265b131b8d836b5",
+  "compiler": "g++ (GCC) 15.3.0",
+  "platform": "Linux/x86_64",
+  "optimization_levels": [
+    "-O0",
+    "-O2"
+  ],
+  "sources_sha256": {
+    "SourceFiles/data/data_changes.h": "fcfb754a9d161c8342d29d7da8cc3a0b6d37dbd63218e02d1e56fcb649662d97",
+    "SourceFiles/data/data_changes.cpp": "c83bb554726b28e999d583b5d6a24e7a5ba280c6b858c6a86048ebb8c3b8c48c",
+    "SourceFiles/data/data_chat_participant_status.h": "165bbf90a8e7c8be32d85a9fae10dc750d15791d6c7a1eec68e2714361c156f5",
+    "SourceFiles/main/main_session.h": "5cbd4e0dd8164058d7ad1a94d1561b9bc40723d625cd2659653d0fd704f9179e",
+    "lib_base/base/flags.h": "257c660d5e51ef2f254a562d37688b420e4720c2c6b03dfdde81349bb37aeb68",
+    "lib_base/base/flat_map.h": "7df688157da356145cd2e1a5263f40204a9a2f6f1892966daf95b02d6ef80f11",
+    "lib_rpl/rpl/event_stream.h": "abec9363dfcddca1b00fed45ebebf0a751f197e0ad1a4df968318d80efedbe25"
+  },
+  "scheme_h_sha256": "932900f0a199ded47fd232f42ae23d8fbd811040e9f00d824ae365e746eb3dec",
+  "fixtures": {
+    "peer-shifts.csv": {
+      "lines": 242,
+      "sha256": "c4709ea3b4393bcb9f452f50711528021724f56abffa7d6ae047ef8cf47f4ce0"
+    },
+    "managers.csv": {
+      "lines": 210,
+      "sha256": "4633bdd906e7e0d21e492d501414ac22b090e2ccf62f568e23a0680857de099a"
+    },
+    "flags.csv": {
+      "lines": 148,
+      "sha256": "e742c254aea81935e75bc87202d93808cf5452b7da3feee5ef39475d5754b845"
+    }
+  },
+  "scope": "real Manager bodies for 7 update types + real Changes ctor/sendNotifications; no Main::Session lifecycle or crl scheduling"
+}
