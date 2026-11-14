@@ -14,12 +14,13 @@ Borrow закрывается до fire; secondary refs/leases стабильн�
 188 done/119 partial/0 pending; зависимости перечислены отдельно. Native вне
 клона1706 строк (1688 сравнений+18 registry inputs), два identical runs;
 полные классы/Session/TL/attributes — own tests+чтение, probe требует lang_auto.h.
-33 новых targeted tests и clippy PASS; финальные workspace проверки ещё идут.
+33 новых tests; fmt/clippy/test workspace PASS после merge принятого main750204e:
+809 успешных результатов (808+1 child),0 failed,3 прежних ignored.
 Новых зависимостей/manifest/lock изменений нет. Учет ledger partial перечисляет
 UI5/6, storage/file_download3/4, platform MIME/FileLocations33, History18, lang01.
 Подробности, исходные quirks и пределы доказательства:
 docs/handoffs/codex-data-media.md. Чужие localstorage/runtime/Claude files и
-reserved docs-only stage4-plan.md не менялись. Main интеграция после проверок.
+reserved docs-only stage4-plan.md не менялись. Интеграция только собственной ветки после проверок, без force.
 
 Предварительная полная проверка на базе0c38855: fmt --check PASS, clippy --workspace --all-targets -D warnings PASS, test --workspace PASS (802 успешных результата,0 failed,3 прежних ignored). После совмещения с уже принятым main750204e проверки повторяются.
 

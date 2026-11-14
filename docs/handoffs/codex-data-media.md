@@ -87,9 +87,25 @@ reentrant callbacks — **own tests + чтение**, не native классов
 не чистая fresh-classification функция: сохраняет старый type/additional и
 обращается к owner/cloud paths. Windows/macOS file/bookmark поведение не доказано.
 
-33 новых теста:22 data_media,10 media_stores,1 media_cache; последние targeted
-clippy/test PASS. Три обязательные финальные workspace проверки и интеграция
-ещё выполняются; результат будет дописан после фактического завершения.
+33 новых теста:22 data_media,10 media_stores,1 media_cache. Все три проверки
+PORTING.md через nix develop PASS на реализации20ac37c и повторно после merge
+принятого main750204e (merge9de6930):
+
+```text
+cargo fmt --check                                      PASS
+cargo clippy --workspace --all-targets -- -D warnings   PASS
+cargo test --workspace                                PASS
+809 successful results, 0 failed, 3 existing ignored
+33 new media tests                                    PASS
+```
+
+809 включает один существующий child-process результат (808 основных+1 child).
+Логи: /tmp/data-media-workspace-checks.log (первая база802),
+/tmp/data-media-merged-checks.log (финальное совместное дерево809).
+Конфликт PROGRESS при merge разрешён сохранением обеих записей. Файлы уже
+принятого localstorage в совместном дереве побайтно совпадают с main750204e;
+private port/localstorage не интегрировалась. Финальное продвижение main —
+обычный fast-forward, push main и port/data-media без force.
 
 Карта data-media-map.md: **307 строк восьми файлов,188 done/119 partial,
 0 pending**. Смежные функции/owner contracts перечислены отдельно. done —
@@ -123,3 +139,7 @@ Geo float casts имеют UB; Rust wrapping/saturating края не объяв
 ObjectAsync::drop оставили Claude; его файлы не менялись.
 
 Предварительная полная проверка на базе0c38855: fmt --check PASS, clippy --workspace --all-targets -D warnings PASS, test --workspace PASS (802 успешных результата,0 failed,3 прежних ignored). После совмещения с уже принятым main750204e проверки повторяются.
+
+FileLocation является scalar/model срезом: macOS bookmark state и динамическое
+разрешение bookmark name ещё не реализованы (33), native подтвердил Linux
+non-bookmark случаи. Полную платформенную эквивалентность не заявляем.

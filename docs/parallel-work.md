@@ -91,8 +91,9 @@ leases, TL, filename/MIME contract, cache queue adapter. Wire PhotoKey/DocumentK
 бodies; reserved docs-only audit file не менялся. Lookup-key и mutable wire id
 могут различаться ровно как C++. Source repeated conversion quirk сохранён.
 307 строк188 done/119 partial/0 pending; native1706,33 targeted tests/clippy PASS.
-Финальные workspace проверки/интеграция выполняются; до фактического PASS
-готовность не подразумевается. Не интегрировать private port/localstorage:
+Финальные fmt/clippy/test workspace PASS после merge уже принятого main750204e:
+809 successful (808+1 child),0 failed,3 existing ignored. Интеграция своей ветки
+в main обычным fast-forward, push main+port/data-media без force. Не интегрировать private port/localstorage:
 он у Claude; уже принятый main750204e сохранить. Области Claude и чужие файлы
 не менялись. Известная гонка ObjectAsync::drop остаётся владельцу tg-runtime.
 
