@@ -2460,8 +2460,8 @@ SourceFiles/storage/file_upload.cpp,1276,tg-core,3,todo
 SourceFiles/storage/file_upload.h,228,tg-core,3,todo
 SourceFiles/storage/localimageloader.cpp,1311,tg-core,3,todo
 SourceFiles/storage/localimageloader.h,352,tg-core,3,todo
-SourceFiles/storage/localstorage.cpp,1445,tg-core,3,todo
-SourceFiles/storage/localstorage.h,104,tg-core,3,todo
+SourceFiles/storage/localstorage.cpp,1445,tg-core,3,partial
+SourceFiles/storage/localstorage.h,104,tg-core,3,partial
 SourceFiles/storage/serialize_common.cpp,48,tg-core,3,done
 SourceFiles/storage/serialize_common.h,175,tg-core,3,done
 SourceFiles/storage/serialize_document.cpp,308,tg-core,3,todo
