@@ -1424,4 +1424,18 @@ surrogate QString. Media ID remap/collision gate03/16 не обходился.
 port/tdata-settings, port/base-linux и docs-only stage4 audit не менялись и не вливались.
 Полный учёт: docs/handoffs/codex-data-peer.md.
 
-DATA_PEER_CHECK_PENDING
+
+Проверка data-peer (Claude, 14.11.2026): Codex упёрся в лимит до финиша; доведено
+вручную. fmt/clippy PASS, cargo test --workspace 734 passed / 0 failed / 3 прежних
+ignored, коммит 9b7013a влит в main, CI зелёный. Выборочно сверено UsernamesInfo
+с оригиналом.
+
+## 14.11.2026: блоки настроек tdata (port/tdata-settings, Claude)
+
+ReadSetting перенесён полностью по разбору байтов: все 88 веток, NoTimeLimit,
+ApplyReadFallbackConfig. Записи в Core::Settings, cSet*, тему, PowerSaving,
+UpdateChecker и SessionSettings — упорядоченные эффекты для будущих владельцев
+(31/29/06/5), без заглушек. readMtpData читает все блоки через read_setting.
+Карта crates/tg-core/docs/settings-scheme-map.md, 16 тестов. Нативной сверки нет:
+ReadSetting не собрать без Core::App — own tests + чтение. localstorage.cpp не начат.
+Новая внутренняя зависимость tg-core → tg-cache (maxDataSize).

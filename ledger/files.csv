@@ -2446,8 +2446,8 @@ SourceFiles/statistics/widgets/point_details_widget.h,85,tg-app,9,todo
 SourceFiles/stdafx.h,145,tg-core,4,todo
 SourceFiles/storage/details/storage_file_utilities.cpp,678,tg-core,3,done
 SourceFiles/storage/details/storage_file_utilities.h,113,tg-core,3,done
-SourceFiles/storage/details/storage_settings_scheme.cpp,1202,tg-core,3,todo
-SourceFiles/storage/details/storage_settings_scheme.h,178,tg-core,3,todo
+SourceFiles/storage/details/storage_settings_scheme.cpp,1202,tg-core,3,partial
+SourceFiles/storage/details/storage_settings_scheme.h,178,tg-core,3,done
 SourceFiles/storage/download_manager_mtproto.cpp,1045,tg-core,3,todo
 SourceFiles/storage/download_manager_mtproto.h,288,tg-core,3,todo
 SourceFiles/storage/file_download.cpp,565,tg-core,3,todo

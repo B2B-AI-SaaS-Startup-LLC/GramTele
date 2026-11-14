@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 md-5 = "0.11"
 tg-base = { path = "../tg-base" }
+tg-cache = { path = "../tg-cache" }
 tg-mtproto = { path = "../tg-mtproto" }
 tg-rpl = { path = "../tg-rpl" }
 tg-runtime = { path = "../tg-runtime" }

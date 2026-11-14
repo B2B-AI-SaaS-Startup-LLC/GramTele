@@ -1,5 +1,6 @@
 //! Account map handles and MTProto authorization only. Cache/settings are not loaded.
 use super::details::storage_file_utilities::*;
+use super::details::storage_settings_scheme::{read_setting, ReadSettingsContext};
 use crate::main::main_account::Authorization;
 use md5::{Digest, Md5};
 use std::{
@@ -199,29 +200,21 @@ impl Account {
             .ok_or(Error::Invalid("local key missing"))?;
         let file = read_encrypted_file(&to_file_part(self.data_name_key), &self.root, key)?;
         let mut r = file.reader();
-        let mut modern = Vec::new();
-        let mut legacy = Authorization::default();
+        // legacyHasCustomDayBackground needs _legacyBackgroundKeyDay (package 29).
+        let mut context = ReadSettingsContext::default();
         while !r.at_end() {
-            match check_stream_status(r.i32())? {
-                0x4b => modern = check_stream_status(r.bytes())?,
-                0 => {
-                    let dc = check_stream_status(r.i32())?;
-                    let data = check_stream_status(r.raw(256))?.try_into().unwrap();
-                    legacy.keys.push(Arc::new(AuthKey::new(
-                        tg_mtproto::mtproto_auth_key::KeyType::ReadFromFile,
-                        dc,
-                        data,
-                        0,
-                    )));
-                }
-                1 => {
-                    legacy.user_id = check_stream_status(r.i32())? as u64;
-                    legacy.main_dc_id = check_stream_status(r.i32())?;
-                }
-                _ => return Err(Error::Invalid("legacy ReadSetting block deferred")),
+            let block_id = check_stream_status(r.i32())? as u32;
+            if !read_setting(block_id, &mut r, file.version, &mut context) {
+                return Err(Error::Invalid("ReadSetting failed"));
             }
         }
-        self.apply_read_authorization_context(&modern, legacy)?;
+        let legacy = Authorization {
+            keys: std::mem::take(&mut context.mtp_legacy_keys),
+            main_dc_id: context.mtp_legacy_main_dc_id,
+            user_id: context.mtp_legacy_user_id as u64,
+            ..Default::default()
+        };
+        self.apply_read_authorization_context(&context.mtp_authorization, legacy)?;
         Ok(())
     }
     pub fn apply_read_authorization_context(
